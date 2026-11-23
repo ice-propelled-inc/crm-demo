@@ -1,6 +1,6 @@
 # AI-chat-helper
 
-AI-chat-helper is an AI module that communicates with clients for a CRM. It answers clients in Instagram and in website live chats (Jivo, Tidio). It creates, tracks and cancels orders through the CRM API and webhooks. When necessary, it sends a WhatsApp notification to a human operator. The operator then answers the client in the operator chat.
+AI-chat-helper is an AI module that communicates with clients for a CRM. It answers clients in Instagram and in the Jivo website live chat. It creates, tracks and cancels orders through the CRM API and webhooks. When necessary, it sends a WhatsApp notification to a human operator. The operator then answers the client in the operator chat.
 
 The module operates with all CRMs. Each CRM connects through an adapter. The module operates with all types of business. The catalog ("menu") can contain all types of goods or services.
 
@@ -10,7 +10,8 @@ This document is for developers and DevOps engineers.
 
 ## Functions
 
-- **Channels**: Instagram Direct (Meta Instagram API with Instagram Login) and third-party website live chats (Jivo, Tidio).
+- **Channels**: Instagram Direct (Meta Instagram API with Instagram Login) and the Jivo website live chat (Jivo Bot API).
+- **Tidio is not supported**: the public Tidio API has no webhook for a visitor message in live chat and no endpoint for a bot reply. Only tickets have a reply endpoint. Refer to *Open items*.
 - **Order operations**: The module creates, tracks and cancels orders through a CRM adapter. The CRM gives a payment link for each new order. The bot shows the link to the client. The CRM sends order status changes to the module through a webhook. The bot tells the client about each change.
 - **AI behavior that you can configure**: harness prompts, tone of voice, topic restriction level, catalog data source and reply delays that look human. You set all of these in the admin panel.
 - **Human handoff**: The module sends a WhatsApp notification to an operator from the operator pool. The notification contains a link to the operator chat. The operator talks to the client in the operator chat. When the operator sends `/out-to-AI`, the AI continues the conversation.
@@ -25,6 +26,7 @@ This document is for developers and DevOps engineers.
 | Application | Purpose | Users |
 |---|---|---|
 | **Backend** | Channels, AI agent, CRM adapter, workers, APIs | — |
+| **Worker** | Background jobs: agent turns, delayed replies, CRM status events, handoff time limits, order status check | — |
 | **Admin panel** | Setup only. All configuration parameters. | CRM administrators |
 | **Operator chat** | Live chat with clients during a handoff. Conversation history and handoff log. | Operators, urgent managers |
 
@@ -215,8 +217,8 @@ The module connects to the CRM through an adapter interface. This interface oper
 | Path | Purpose |
 |---|---|
 | `POST /webhooks/crm/{tenant}` | Incoming CRM order status events |
-| `POST /webhooks/jivo/{tenant}` | Incoming Jivo messages |
-| `POST /webhooks/tidio/{tenant}` | Incoming Tidio messages |
+| `POST /webhooks/jivo/{tenant}/{token}` | Incoming Jivo Bot API events. The token in the path is the Jivo channel token. |
+| `POST /webhooks/tidio/{tenant}` | Returns 501: Tidio is not supported |
 | `GET/POST /webhooks/instagram/{tenant}` | Meta webhook verification and incoming Instagram messages |
 | `GET/POST /webhooks/whatsapp` | WhatsApp Cloud API verification and delivery status of notifications |
 | `/auth/*` | CRM OAuth login for admins and operators |
@@ -246,6 +248,11 @@ For all incoming webhooks, do a check of the signature or the shared secret. Do 
 | `PUBLIC_BASE_URL` | The public URL of the backend. The OAuth callback uses it. |
 | `SESSION_SECRET_KEY` | The key that signs the user sessions |
 | `ENCRYPTION_KEY` | The Fernet key that encrypts the credentials in the database |
+| `WHATSAPP_URGENT_TEMPLATE_NAME` | The WhatsApp template for urgent alerts to managers |
+| `TELEPHONY_ACCOUNT_SID` | Twilio account SID (`TELEPHONY_API_KEY` is the auth token) |
+| `JIVO_API_BASE`, `INSTAGRAM_API_BASE`, `WHATSAPP_API_BASE`, `TELEPHONY_API_BASE` | API base URLs. Local docker points them to the mock servers. |
+| `FRONTEND_ORIGINS` | SPA origins that the login can redirect to |
+| `CRM_AUTHORIZE_BASE_OVERRIDE` | Local docker only: the browser URL of the mock CRM |
 | `LOG_LEVEL` | The log level |
 
 Keep the secrets in a secret manager or in `.env`. Do not commit `.env`. The module encrypts the CRM OAuth credentials of each tenant and keeps them in the database.
@@ -263,8 +270,13 @@ docker compose up -d db       # Postgres with pgvector (also makes the chat_test
 make migrate                  # Alembic migrations
 make lint                     # ruff, mypy, eslint, tsc
 make test                     # pytest (integration tests use the db service), vitest
-make dev                      # full stack: db, backend, mocks, two SPAs
+make dev                      # full stack: db, backend, worker, mocks, two SPAs
+make seed-dev                 # dev tenant: mock CRM, Jivo channel, 2 operators, 1 urgent manager
 ```
+
+`make seed-dev` prints the tenant ID. Open the SPAs with `?tenant=<tenant ID>`. The mock CRM shows a page where you select the user: `admin-1` (admin), `operator-1` or `operator-2` (operators), `manager-1` (urgent manager).
+
+Create a real tenant with `python -m app.cli create-tenant --name ... --crm-base-url ... --client-id ... --client-secret ... --webhook-secret ...`. After you change an API, run `make api-types`.
 
 | Item | URL |
 |---|---|
@@ -273,7 +285,7 @@ make dev                      # full stack: db, backend, mocks, two SPAs
 | Operator chat (dev server) | `http://localhost:5174/operator/` |
 | Mock servers | `http://localhost:8090/docs` |
 
-For local development, mock services replace the CRM (OAuth included), Jivo, Tidio, Instagram, WhatsApp and Twilio. The mock CRM uses the generic contract in `app/adapters/crm/generic_http.py`. Refer to `DESCRIPTION.md` → *Development harness*.
+For local development, mock services replace the CRM (OAuth included), Jivo, Instagram, WhatsApp and Twilio. The AI model is a mock until build step 11, so the bot does not answer real messages in the local stack yet. The mock CRM uses the generic contract in `app/adapters/crm/generic_http.py`. Refer to `DESCRIPTION.md` → *Development harness*.
 
 ---
 
@@ -293,3 +305,5 @@ For local development, mock services replace the CRM (OAuth included), Jivo, Tid
 
 - The final AI model. Start with Claude Sonnet 5.5. Confirm the selection with the eval suite after all other parts are complete.
 - The prices (Meta, Jivo, LLM). Not examined at this time.
+- **Tidio**: its API cannot run a live-chat bot. Select one: remove Tidio, connect Tidio through another way (for example its own bot flows), or wait for an API change.
+- The real AI model and embedding providers (build step 11).

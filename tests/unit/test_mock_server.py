@@ -21,7 +21,7 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
 
 async def test_recorder(client: httpx.AsyncClient) -> None:
     response = await client.post("/twilio/2010-04-01/Calls.json", json={"To": "+1"})
-    assert response.json()["id"] == "twilio-1"
+    assert response.json()["sid"] == "twilio-1"
     await client.post("/jivo/send", content=b"not json")
     [call] = (await client.get("/_recorded/twilio")).json()
     assert (call["path"], call["body"]) == ("2010-04-01/Calls.json", {"To": "+1"})

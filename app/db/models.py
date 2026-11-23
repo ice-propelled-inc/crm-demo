@@ -56,6 +56,11 @@ def _created_at() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+def _event_time() -> Mapped[datetime]:
+    """Wall-clock time, so rows written in one transaction keep their order."""
+    return mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -149,11 +154,33 @@ class Conversation(Base):
     funnel_stage: Mapped[str | None] = mapped_column(String(100))
     human_request_count: Mapped[int] = mapped_column(Integer, default=0)
     off_topic_count: Mapped[int] = mapped_column(Integer, default=0)
+    # The channel thread for replies (for example the Jivo chat_id).
+    channel_thread_ref: Mapped[str | None] = mapped_column(String(200))
+    # {"action", "summary", "payload"} while the bot waits for a clear "yes".
+    pending_confirmation: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     last_client_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Job(Base):
+    """Background job (Postgres queue, claimed with FOR UPDATE SKIP LOCKED)."""
+
+    __tablename__ = "jobs"
+    __table_args__ = (Index("ix_jobs_due", "run_at", postgresql_where="done_at IS NULL"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    tenant_id: Mapped[uuid.UUID] = _tenant_fk()
+    kind: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = _created_at()
 
 
 class Message(Base):
@@ -168,7 +195,7 @@ class Message(Base):
     sender: Mapped[str] = mapped_column(String(20))
     body: Mapped[str] = mapped_column(Text)
     provider_message_id: Mapped[str | None] = mapped_column(String(200))
-    created_at: Mapped[datetime] = _created_at()
+    created_at: Mapped[datetime] = _event_time()
 
 
 class User(Base):
@@ -223,8 +250,10 @@ class Handoff(Base):
     operator_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("operators.id", ondelete="SET NULL")
     )
+    tried_operator_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(Uuid), default=list)
+    summary: Mapped[str | None] = mapped_column(Text)
     alerts: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
-    requested_at: Mapped[datetime] = _created_at()
+    requested_at: Mapped[datetime] = _event_time()
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -260,7 +289,7 @@ class PendingMessage(Base):
     reason: Mapped[str] = mapped_column(String(100))
     keep_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = _created_at()
+    created_at: Mapped[datetime] = _event_time()
 
 
 class CatalogItem(Base):

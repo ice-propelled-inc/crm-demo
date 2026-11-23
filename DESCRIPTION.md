@@ -49,7 +49,8 @@ The admin panel and the operator chat are two separate applications. Admins and 
 ## Functional requirements
 
 ### Channels
-- **Jivo, Tidio**: The module receives messages through the webhooks of these services. The module sends replies through their APIs. The module shows a "typing…" indicator if the API has this function.
+- **Jivo**: The module uses the Jivo Bot API. Jivo sends `CLIENT_MESSAGE` events to `/webhooks/jivo/{tenant}/{token}`. The module sends `BOT_MESSAGE` events to `https://bot.jivosite.com/webhooks/{provider_id}/{token}`. Jivo waits 3 seconds, thus the endpoint only queues the event. Jivo has no typing event.
+- **Tidio**: Not supported. The public Tidio API has no webhook for a visitor message in live chat and no endpoint for a bot reply in live chat. Only tickets have a reply endpoint. The `TidioAdapter` is a stub.
 - **Instagram**: Use the Meta Instagram API with Instagram Login. Use the same `ChannelAdapter` interface. Refer to *Instagram integration options*.
 
 ### Configuration parameters
@@ -229,9 +230,11 @@ Sources: [Meta Instagram Platform overview](https://developers.facebook.com/docs
 | 15 | No operator accepts | Send an urgent alert to the urgent managers. Give control back to the AI at the same time. |
 | 16 | Data retention | A maximum of 3 years, or until the client asks to delete their data or account |
 | 17 | Conversation history and handoff log | In the operator chat |
+| 19 | Tidio | Not supported: the Tidio API cannot run a live-chat bot. Decision TBD. |
 | 18 | Urgent alert types | Phone call through Twilio (text-to-speech) and WhatsApp text message. Set the type and the phone number for each manager in the admin panel. |
 
 ## Open items (TBD)
+- Tidio (decision 19): remove it, connect it another way, or wait for an API change.
 - The final AI model (decision 9). Start with Claude Sonnet 5.5.
 - The prices (decision 10).
 
@@ -268,10 +271,16 @@ app/
     llm/       base.py  anthropic.py  mock.py
     embeddings/ base.py  mock.py
     catalog/   base.py  crm_catalog.py  external_api.py  mock.py
-  agent/                  # prompt assembly, tools, memory retrieval, few-shot retrieval
-  workers/                # message processing, delayed send, catalog sync, notifications
+  agent/                  # classifier, prompt assembly, tools, memory, the agent turn
+  services/               # conversations, orders, handoff
+  webhooks/               # incoming webhooks (CRM, Jivo, Instagram, WhatsApp)
+  workers/                # job queue, job handlers, worker loop
   admin/                  # admin API routers
   operator/               # operator API routers, WebSocket
+  events.py               # event bus (in memory, Postgres LISTEN/NOTIFY)
+  runtime.py              # runtime dependencies (adapters, clock)
+  tenant_settings.py      # tenant configuration model
+  cli.py                  # create-tenant, seed-dev
   prompts/defaults/{en,fr}/
 frontend/
   admin/                  # React SPA: admin panel

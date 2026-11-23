@@ -10,7 +10,7 @@ endif
 
 FRONTENDS := frontend/admin frontend/operator
 
-.PHONY: install dev down migrate test test-backend test-frontend lint lint-backend lint-frontend eval
+.PHONY: install dev down migrate seed-dev api-types test test-backend test-frontend lint lint-backend lint-frontend eval
 
 install:  ## Create the virtual environment and install all dependencies
 	$(VENV_PY) -m venv .venv
@@ -28,6 +28,14 @@ down:
 
 migrate:  ## Run the migrations against DATABASE_URL
 	$(PY) -m alembic upgrade head
+
+seed-dev:  ## Tenant for the mock CRM, with a Jivo channel, operators and an urgent manager
+	docker compose exec app python -m app.cli seed-dev
+
+api-types:  ## OpenAPI schema -> TypeScript types of the two SPAs
+	$(PY) -m app.export_openapi frontend/openapi.json
+	cd frontend/admin && npm run gen:api
+	cd frontend/operator && npm run gen:api
 
 test: test-backend test-frontend
 

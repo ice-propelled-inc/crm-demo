@@ -21,18 +21,31 @@ class Settings(BaseSettings):
     whatsapp_phone_id: str = ""
     whatsapp_app_secret: str = ""
     whatsapp_verify_token: str = ""
-    whatsapp_template_name: str = ""
+    whatsapp_template_name: str = "operator_handoff"
+    whatsapp_urgent_template_name: str = "urgent_handoff"
+    whatsapp_api_base: str = "https://graph.facebook.com/v21.0"
 
     instagram_app_id: str = ""
     instagram_app_secret: str = ""
     instagram_verify_token: str = ""
+    instagram_api_base: str = "https://graph.instagram.com/v21.0"
+
+    jivo_api_base: str = "https://bot.jivosite.com"
 
     telephony_provider: str = "mock"
-    telephony_api_key: str = ""
+    telephony_account_sid: str = ""
+    telephony_api_key: str = ""  # Twilio auth token
     telephony_from_number: str = ""
+    telephony_api_base: str = "https://api.twilio.com"
 
     operator_chat_url: str = "http://localhost:8000/operator"
     public_base_url: str = "http://localhost:8000"
+    # Absolute URLs that the login may redirect to (SPA dev servers).
+    frontend_origins: list[str] = ["http://localhost:5173", "http://localhost:5174"]
+
+    worker_poll_seconds: float = 1.0
+    # Local docker only: the browser URL of the mock CRM (the app uses http://mocks:8090/crm).
+    crm_authorize_base_override: str = ""
 
     session_secret_key: str = Field(default="dev-only-change-me", min_length=8)
     # Fernet key for credentials kept in the database. Dev-only default: replace it.

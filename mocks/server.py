@@ -10,6 +10,7 @@ All state is in memory. `POST /_reset` clears it.
 """
 
 import hashlib
+import html
 import json
 import os
 import secrets
@@ -22,7 +23,7 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, FastAPI, Form, Header, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from app.security import hmac_sha256_signature
@@ -93,6 +94,8 @@ class CrmState:
 class RecorderState:
     records: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     ids: count[int] = field(default_factory=lambda: count(1))
+    # service -> (HTTP status, JSON body): the recorder answers with this error.
+    failures: dict[str, tuple[int, Any]] = field(default_factory=dict)
 
 
 crm_state = CrmState()
@@ -119,11 +122,27 @@ async def authorize(
     code_challenge: str,
     response_type: str = "code",
     code_challenge_method: str = "S256",
-    login_as: str = "admin-1",
-) -> RedirectResponse:
-    """Approves at once. `login_as` selects the mock user (no login page)."""
+    login_as: str | None = None,
+) -> Response:
+    """`login_as` selects the mock user. Without it, a page lists the mock users."""
     if client_id != CLIENT_ID or response_type != "code" or code_challenge_method != "S256":
         raise HTTPException(400, "invalid authorize request")
+    if login_as is None:
+        query = urlencode(
+            {
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+                "state": state,
+                "code_challenge": code_challenge,
+                "response_type": response_type,
+                "code_challenge_method": code_challenge_method,
+            }
+        )
+        links = "".join(
+            f'<li><a href="?{query}&login_as={uid}">{html.escape(u["name"])}</a> ({uid})</li>'
+            for uid, u in crm_state.users.items()
+        )
+        return HTMLResponse(f"<h1>Mock CRM login</h1><ul>{links}</ul>")
     if login_as not in crm_state.users:
         raise HTTPException(400, "unknown user")
     code = secrets.token_urlsafe(16)
@@ -270,19 +289,51 @@ RECORDED_SERVICES = ("jivo", "tidio", "instagram", "whatsapp", "twilio")
 
 
 @recorder.post("/{service}/{path:path}")
-async def record(service: str, path: str, request: Request) -> dict[str, Any]:
+async def record(service: str, path: str, request: Request) -> Any:
     if service not in RECORDED_SERVICES:
         raise HTTPException(404, "unknown service")
     raw = await request.body()
-    try:
-        body: Any = json.loads(raw) if raw else None
-    except ValueError:
-        body = raw.decode(errors="replace")
+    body: Any
+    if request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
+        body = dict((await request.form()).items())
+    else:
+        try:
+            body = json.loads(raw) if raw else None
+        except ValueError:
+            body = raw.decode(errors="replace")
     entry_id = f"{service}-{next(recorder_state.ids)}"
     recorder_state.records.setdefault(service, []).append(
         {"id": entry_id, "path": path, "body": body, "headers": dict(request.headers)}
     )
+    failure = recorder_state.failures.get(service)
+    if failure is not None:
+        return JSONResponse(failure[1], status_code=failure[0])
+    # Response shapes of the real APIs, so the real adapters can talk to the recorders.
+    if service == "whatsapp":
+        return {"messaging_product": "whatsapp", "messages": [{"id": entry_id}]}
+    if service == "twilio":
+        return {"sid": entry_id, "status": "queued"}
+    if service == "instagram":
+        return {"recipient_id": "mock", "message_id": entry_id}
     return {"id": entry_id}
+
+
+class _Failure(BaseModel):
+    status: int = 400
+    body: Any = None
+
+
+@recorder.put("/_control/fail/{service}")
+async def set_failure(service: str, failure: _Failure) -> dict[str, str]:
+    """Test control: the recorder of `service` answers with an error until it is cleared."""
+    recorder_state.failures[service] = (failure.status, failure.body)
+    return {"status": "failing"}
+
+
+@recorder.delete("/_control/fail/{service}")
+async def clear_failure(service: str) -> dict[str, str]:
+    recorder_state.failures.pop(service, None)
+    return {"status": "ok"}
 
 
 @recorder.get("/_recorded/{service}")

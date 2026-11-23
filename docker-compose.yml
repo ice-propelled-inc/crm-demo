@@ -31,8 +31,14 @@ services:
     env_file:
       - path: .env
         required: false
-    environment:
+    environment: &app-env
       DATABASE_URL: postgresql+asyncpg://chat:chat@db:5432/chat
+      # Local development: the real adapters talk to the mock servers.
+      JIVO_API_BASE: http://mocks:8090/jivo
+      INSTAGRAM_API_BASE: http://mocks:8090/instagram
+      WHATSAPP_API_BASE: http://mocks:8090/whatsapp
+      TELEPHONY_API_BASE: http://mocks:8090/twilio
+      CRM_AUTHORIZE_BASE_OVERRIDE: http://localhost:8090/crm
     volumes:
       - ./app:/srv/app
       - ./mocks:/srv/mocks
@@ -43,6 +49,19 @@ services:
         condition: service_healthy
       mocks:
         condition: service_started
+
+  worker:
+    build: .
+    command: python -m app.workers.run
+    env_file:
+      - path: .env
+        required: false
+    environment: *app-env
+    volumes:
+      - ./app:/srv/app
+    depends_on:
+      db:
+        condition: service_healthy
 
   admin-ui:
     image: node:22-alpine

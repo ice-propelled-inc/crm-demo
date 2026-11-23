@@ -45,7 +45,7 @@ select = ["E", "F", "W", "I", "B", "UP", "N", "S", "ASYNC", "RUF"]
 ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S105", "S106", "S311"]
+"tests/**" = ["S105", "S106", "S311", "B008"]
 "mocks/**" = ["S105", "S106"]
 
 [tool.mypy]
@@ -54,7 +54,7 @@ python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pgvector.*"]
+module = ["pgvector.*", "asyncpg.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

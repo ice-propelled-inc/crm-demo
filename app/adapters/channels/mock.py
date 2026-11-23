@@ -20,6 +20,7 @@ class SentMessage:
     client_ref: str
     text: str
     human_agent: bool
+    thread_ref: str | None = None
 
 
 @dataclass
@@ -42,18 +43,24 @@ class MockChannelAdapter(ChannelAdapter):
                     provider_message_id=data["message_id"],
                     received_at=datetime.fromisoformat(data["received_at"]),
                     display_name=data.get("name"),
+                    thread_ref=data.get("thread_ref"),
                 )
             ]
         except (ValueError, KeyError) as exc:
             raise InvalidChannelWebhook("bad mock webhook") from exc
 
     async def send_message(
-        self, client_ref: str, text: str, *, human_agent: bool = False
+        self,
+        client_ref: str,
+        text: str,
+        *,
+        thread_ref: str | None = None,
+        human_agent: bool = False,
     ) -> DeliveryResult:
         if client_ref in self.closed_clients:
             return DeliveryResult(delivered=False, reason="window_closed")
-        self.sent.append(SentMessage(client_ref, text, human_agent))
+        self.sent.append(SentMessage(client_ref, text, human_agent, thread_ref))
         return DeliveryResult(delivered=True, provider_message_id=f"mock-{next(self._ids)}")
 
-    async def set_typing(self, client_ref: str, on: bool) -> None:
+    async def set_typing(self, client_ref: str, on: bool, *, thread_ref: str | None = None) -> None:
         self.typing.append((client_ref, on))

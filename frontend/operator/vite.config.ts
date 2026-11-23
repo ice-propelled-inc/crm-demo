@@ -8,6 +8,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       "/auth": "http://localhost:8000",
+      "/operator/ws": { target: "ws://localhost:8000", ws: true },
       "/operator/api": "http://localhost:8000",
     },
   },

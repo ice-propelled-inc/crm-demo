@@ -72,7 +72,7 @@ def _roles_app() -> FastAPI:
 
     @app.get("/admin-only")
     async def admin_only(
-        user: CurrentUser = Depends(require_roles(Role.ADMIN)),  # noqa: B008
+        user: CurrentUser = Depends(require_roles(Role.ADMIN)),
     ) -> dict[str, list[str]]:
         return {"roles": sorted(user.roles)}
 

@@ -63,8 +63,11 @@ class GenericHttpCRMAdapter(CRMAdapter):
         webhook_secret: str | None,
         status_map: Mapping[str, OrderStatus] | None = None,
         http: httpx.AsyncClient | None = None,
+        authorize_base_url: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
+        # The browser opens the authorize page. In local docker it has another host name.
+        self._authorize_base_url = (authorize_base_url or base_url).rstrip("/")
         self._client_id = client_id
         self._client_secret = client_secret
         self._webhook_secret = webhook_secret
@@ -138,7 +141,7 @@ class GenericHttpCRMAdapter(CRMAdapter):
                 "code_challenge_method": "S256",
             }
         )
-        return f"{self._base_url}/oauth/authorize?{query}"
+        return f"{self._authorize_base_url}/oauth/authorize?{query}"
 
     async def exchange_code(
         self, *, code: str, redirect_uri: str, code_verifier: str

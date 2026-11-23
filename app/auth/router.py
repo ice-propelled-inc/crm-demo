@@ -32,9 +32,15 @@ def _redirect_uri() -> str:
 
 
 def _safe_next(next_path: str) -> str:
-    """Only relative paths. This prevents an open redirect."""
-    if next_path.startswith("/") and not next_path.startswith("//") and "\\" not in next_path:
+    """Relative paths, or URLs on a configured SPA origin. This prevents an open redirect."""
+    if "\\" in next_path:
+        return "/"
+    if next_path.startswith("/") and not next_path.startswith("//"):
         return next_path
+    settings = get_settings()
+    for origin in [settings.public_base_url, *settings.frontend_origins]:
+        if next_path == origin or next_path.startswith(origin.rstrip("/") + "/"):
+            return next_path
     return "/"
 
 
