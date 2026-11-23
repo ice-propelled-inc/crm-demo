@@ -1,0 +1,68 @@
+name: ai-chat-helper
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: chat
+      POSTGRES_DB: chat
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat -d chat"]
+      interval: 5s
+      retries: 10
+
+  mocks:
+    build: .
+    command: uvicorn mocks.server:app --host 0.0.0.0 --port 8090
+    environment:
+      MOCK_WEBHOOK_TARGET: http://app:8000
+    ports:
+      - "127.0.0.1:8090:8090"
+
+  app:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://chat:chat@db:5432/chat
+    volumes:
+      - ./app:/srv/app
+      - ./mocks:/srv/mocks
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      mocks:
+        condition: service_started
+
+  admin-ui:
+    image: node:22-alpine
+    working_dir: /srv
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    volumes:
+      - ./frontend/admin:/srv
+      - /srv/node_modules
+    ports:
+      - "127.0.0.1:5173:5173"
+
+  operator-ui:
+    image: node:22-alpine
+    working_dir: /srv
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5174"
+    volumes:
+      - ./frontend/operator:/srv
+      - /srv/node_modules
+    ports:
+      - "127.0.0.1:5174:5174"
+
+volumes:
+  db-data:
