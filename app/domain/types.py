@@ -13,6 +13,7 @@ class ChannelKind(StrEnum):
     INSTAGRAM = "instagram"
     JIVO = "jivo"
     TIDIO = "tidio"
+    TEST = "test"  # web test channel in the admin panel
 
 
 class MessageSender(StrEnum):

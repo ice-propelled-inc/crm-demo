@@ -12,3 +12,8 @@ TEST_DATABASE_URL = os.environ.setdefault(
 )
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("PUBLIC_BASE_URL", "http://localhost:8000")
+
+# Tests never read the developer's .env (for example local Ollama settings).
+from app.settings import Settings  # noqa: E402
+
+Settings.model_config["env_file"] = None

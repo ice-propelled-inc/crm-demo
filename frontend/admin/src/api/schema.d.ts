@@ -253,6 +253,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/api/test-chat/conversation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Test Conversation */
+        get: operations["test_conversation_admin_api_test_chat_conversation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/api/test-chat/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send Test Message */
+        post: operations["send_test_message_admin_api_test_chat_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/api/test-chat/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * New Session
+         * @description A new test client, so each test conversation starts from zero.
+         */
+        post: operations["new_session_admin_api_test_chat_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/api/urgent-managers": {
         parameters: {
             query?: never;
@@ -312,7 +366,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Login */
+        /**
+         * Login
+         * @description Without `tenant_id`, the only tenant is used (one module instance per CRM).
+         */
         get: operations["login_auth_login_get"];
         put?: never;
         post?: never;
@@ -659,7 +716,7 @@ export interface components {
          * ChannelKind
          * @enum {string}
          */
-        ChannelKind: "instagram" | "jivo" | "tidio";
+        ChannelKind: "instagram" | "jivo" | "tidio" | "test";
         /** ChannelOut */
         ChannelOut: {
             /** Credential Keys */
@@ -1084,6 +1141,119 @@ export interface components {
              * @default true
              */
             use_dialog_dataset: boolean;
+        };
+        /** TestChatState */
+        TestChatState: {
+            /** Client Ref */
+            client_ref: string;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Funnel Stage */
+            funnel_stage: string | null;
+            handoff: components["schemas"]["TestHandoff"] | null;
+            /** Human Request Count */
+            human_request_count: number;
+            /** Language */
+            language: string | null;
+            /** Messages */
+            messages: components["schemas"]["TestMessage"][];
+            /** Off Topic Count */
+            off_topic_count: number;
+            /** Oldest Waiting Job Seconds */
+            oldest_waiting_job_seconds: number | null;
+            /** Orders */
+            orders: components["schemas"]["TestOrder"][];
+            /** Pending Confirmation */
+            pending_confirmation: {
+                [key: string]: unknown;
+            } | null;
+            /** Queued Turns */
+            queued_turns: number;
+            /** State */
+            state: string | null;
+            /** Thinking Since */
+            thinking_since: string | null;
+            /** Traces */
+            traces: components["schemas"]["TestTrace"][];
+            /** Typing Until */
+            typing_until: string | null;
+        };
+        /** TestHandoff */
+        TestHandoff: {
+            /** Alerts */
+            alerts: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Operator Name */
+            operator_name: string | null;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: string | null;
+            /** Trigger */
+            trigger: string;
+        };
+        /** TestMessage */
+        TestMessage: {
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Sender */
+            sender: string;
+        };
+        /** TestMessageIn */
+        TestMessageIn: {
+            /** Client Ref */
+            client_ref: string;
+            /** Text */
+            text: string;
+        };
+        /** TestOrder */
+        TestOrder: {
+            /** Crm Order Id */
+            crm_order_id: string;
+            /** Payment Link */
+            payment_link: string | null;
+            /** Status */
+            status: string;
+        };
+        /** TestSession */
+        TestSession: {
+            /** Client Ref */
+            client_ref: string;
+        };
+        /** TestTrace */
+        TestTrace: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message Id */
+            message_id: string | null;
         };
         /** UrgentManagerIn */
         UrgentManagerIn: {
@@ -1742,6 +1912,92 @@ export interface operations {
             };
         };
     };
+    test_conversation_admin_api_test_chat_conversation_get: {
+        parameters: {
+            query: {
+                client_ref: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestChatState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_test_message_admin_api_test_chat_messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestMessageIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_session_admin_api_test_chat_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestSession"];
+                };
+            };
+        };
+    };
     list_urgent_managers_admin_api_urgent_managers_get: {
         parameters: {
             query?: never;
@@ -1858,8 +2114,8 @@ export interface operations {
     };
     login_auth_login_get: {
         parameters: {
-            query: {
-                tenant_id: string;
+            query?: {
+                tenant_id?: string | null;
                 next?: string;
             };
             header?: never;

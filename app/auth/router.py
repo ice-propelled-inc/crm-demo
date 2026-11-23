@@ -65,11 +65,20 @@ async def _roles_for(session: AsyncSession, user: User, crm_user: CrmUser) -> li
 @router.get("/login")
 async def login(
     request: Request,
-    tenant_id: uuid.UUID,
     session: Session,
     adapters: AdapterFactory,
+    tenant_id: uuid.UUID | None = None,
     next: str = "/",
 ) -> RedirectResponse:
+    """Without `tenant_id`, the only tenant is used (one module instance per CRM)."""
+    if tenant_id is None:
+        tenant_ids = (await session.scalars(select(Tenant.id).limit(2))).all()
+        if len(tenant_ids) != 1:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "There is more than one tenant (or none). Open the app with ?tenant=<tenant ID>.",
+            )
+        tenant_id = tenant_ids[0]
     tenant = await _get_tenant(session, tenant_id)
     state = secrets.token_urlsafe(24)
     verifier = new_code_verifier()

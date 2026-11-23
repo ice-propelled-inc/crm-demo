@@ -9,9 +9,12 @@
 7. Send the reply after a human-like delay (with "typing...").
 """
 
+import json
 import logging
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,12 +32,19 @@ from app.agent.prompts import (
     resolve_prompt,
 )
 from app.agent.tools import TOOLS, ToolContext, run_tool
-from app.db.models import Channel, Conversation, LanguagePack, Tenant
+from app.agent.tracing import TracingLLM
+from app.db.models import Channel, Conversation, LanguagePack, Tenant, TurnTrace
 from app.domain.handoff_rules import TurnSignals, evaluate_handoff
 from app.domain.orders import may_execute
 from app.domain.restriction import apply_restriction
 from app.domain.state_machine import ai_may_reply
-from app.domain.types import ConversationState, HandoffTrigger, MessageSender, RestrictionLevel
+from app.domain.types import (
+    ChannelKind,
+    ConversationState,
+    HandoffTrigger,
+    MessageSender,
+    RestrictionLevel,
+)
 from app.runtime import Deps
 from app.services.conversations import (
     add_message,
@@ -59,6 +69,7 @@ class TurnResult:
     conversation: Conversation
     action: str  # "forwarded_to_operator" | "handoff" | "confirmation" | "reply"
     reply: str | None = None
+    trace: dict[str, Any] = field(default_factory=dict)
 
 
 async def _languages(session: AsyncSession, tenant_id: uuid.UUID) -> set[str]:
@@ -73,6 +84,42 @@ async def _languages(session: AsyncSession, tenant_id: uuid.UUID) -> set[str]:
 async def handle_inbound(
     session: AsyncSession, deps: Deps, channel: Channel, inbound: InboundMessage
 ) -> TurnResult:
+    """One agent turn. For the web test channel, the decisions are kept as a trace."""
+    tracer: TracingLLM | None = None
+    if channel.kind == ChannelKind.TEST:
+        tracer = TracingLLM(deps.llm, deps.settings.llm_model_fast)
+        deps = replace(deps, llm=tracer)
+    trace: dict[str, Any] = {"tools": []}
+    started = time.perf_counter()
+    result = await _handle(session, deps, channel, inbound, trace)
+    message_id = trace.pop("message_uuid", None)
+    result.trace = trace
+    if tracer is not None:
+        trace.update(
+            outcome=result.action,
+            reply=result.reply,
+            state=result.conversation.state,
+            seconds=round(time.perf_counter() - started, 2),
+            llm_calls=tracer.calls,
+        )
+        session.add(
+            TurnTrace(
+                tenant_id=channel.tenant_id,
+                conversation_id=result.conversation.id,
+                message_id=message_id,
+                data=json.loads(json.dumps(trace, default=str)),
+            )
+        )
+    return result
+
+
+async def _handle(
+    session: AsyncSession,
+    deps: Deps,
+    channel: Channel,
+    inbound: InboundMessage,
+    trace: dict[str, Any],
+) -> TurnResult:
     tenant = await session.get_one(Tenant, channel.tenant_id)
     settings = await load_tenant_settings(session, tenant.id)
     client, conversation = await get_or_create_conversation(session, channel, inbound)
@@ -82,6 +129,7 @@ async def handle_inbound(
     )
     conversation.last_client_message_at = inbound.received_at
     await session.flush()
+    trace["message_uuid"] = message.id
     await publish(
         deps,
         tenant.id,
@@ -112,6 +160,11 @@ async def handle_inbound(
     )
     client.language = conversation.language
     conversation.funnel_stage = signals.funnel_stage or conversation.funnel_stage
+    trace.update(
+        classification=signals.model_dump(mode="json"),
+        language=conversation.language,
+        funnel_stage=conversation.funnel_stage,
+    )
 
     decision = evaluate_handoff(
         text=inbound.text,
@@ -121,6 +174,11 @@ async def handle_inbound(
         confidence_limit=settings.confidence_limit,
     )
     conversation.human_request_count = decision.human_request_count
+    trace["handoff"] = {
+        "trigger": decision.trigger,
+        "human_request_count": decision.human_request_count,
+        "confidence_limit": settings.confidence_limit,
+    }
     if decision.trigger is not None:
         conversation.pending_confirmation = None
         await start_handoff(session, deps, conversation, decision.trigger)
@@ -128,15 +186,25 @@ async def handle_inbound(
 
     crm = deps.crm_factory(tenant)
     notes: list[str] = []
+    if pending is not None:
+        trace["confirmation"] = {
+            "waiting_for": pending.action.value,
+            "summary": pending.summary,
+            "answer": signals.confirmation,
+            "executed": False,
+        }
     if pending is not None and signals.confirmation != "none":
         conversation.pending_confirmation = None
         if may_execute(pending.action, pending, signals.confirmation == "yes"):
             note, _link = await execute_confirmed(session, crm, deps, conversation, pending)
             notes.append(f"[system note] {note}")
+            trace["confirmation"]["executed"] = True
         else:
             notes.append("[system note] The client did not confirm. Nothing was changed.")
 
-    return await _reply(session, deps, settings, tenant, conversation, crm, signals, notes, inbound)
+    return await _reply(
+        session, deps, settings, tenant, conversation, crm, signals, notes, inbound, trace
+    )
 
 
 async def _reply(
@@ -149,12 +217,18 @@ async def _reply(
     signals: Classification,
     notes: list[str],
     inbound: InboundMessage,
+    trace: dict[str, Any],
 ) -> TurnResult:
     language = conversation.language or settings.default_language
     restriction = apply_restriction(
         RestrictionLevel(settings.restriction_level), signals.topic, conversation.off_topic_count
     )
     conversation.off_topic_count = restriction.off_topic_count
+    trace["restriction"] = {
+        "level": settings.restriction_level,
+        "action": restriction.action,
+        "off_topic_count": restriction.off_topic_count,
+    }
 
     vector = await embed_one(deps, inbound.text)
     examples = (
@@ -190,6 +264,12 @@ async def _reply(
         )
     )
 
+    trace.update(
+        system_prompt=prompt,
+        examples_used=len(examples),
+        memories_used=len(memories),
+        notes=notes,
+    )
     messages = await chat_history(session, conversation.id)
     ctx = ToolContext(session=session, deps=deps, crm=crm, conversation=conversation)
     text = ""
@@ -209,6 +289,9 @@ async def _reply(
         messages.append(ChatMessage("assistant", response.text, tool_calls=response.tool_calls))
         for call in response.tool_calls:
             result = await run_tool(ctx, call.name, call.arguments)
+            trace["tools"].append(
+                {"name": call.name, "arguments": call.arguments, "result": result}
+            )
             messages.append(ChatMessage("tool", result, tool_call_id=call.id))
         if ctx.confirmation is not None or ctx.human_requested:
             break
@@ -225,7 +308,9 @@ async def _reply(
             session, tenant.id, "order_confirmation", language, settings.default_language
         )
         text = render(template, summary=ctx.confirmation.summary).strip()
-        await schedule_reply(session, deps, conversation, text, settings.delays.to_domain())
+        trace["delay_seconds"] = await schedule_reply(
+            session, deps, conversation, text, settings.delays.to_domain()
+        )
         return TurnResult(conversation, "confirmation", text)
 
     if not text:
@@ -238,5 +323,7 @@ async def _reply(
             link = note.split("payment link: ", 1)[1].split(". ", 1)[0]
             if link not in text:
                 text = f"{text}\n{link}"
-    await schedule_reply(session, deps, conversation, text, settings.delays.to_domain())
+    trace["delay_seconds"] = await schedule_reply(
+        session, deps, conversation, text, settings.delays.to_domain()
+    )
     return TurnResult(conversation, "reply", text)

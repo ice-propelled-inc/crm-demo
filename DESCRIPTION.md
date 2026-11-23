@@ -231,6 +231,7 @@ Sources: [Meta Instagram Platform overview](https://developers.facebook.com/docs
 | 16 | Data retention | A maximum of 3 years, or until the client asks to delete their data or account |
 | 17 | Conversation history and handoff log | In the operator chat |
 | 19 | Tidio | Not supported: the Tidio API cannot run a live-chat bot. Decision TBD. |
+| 20 | Tests without a paid API | Admin panel "Test chat" on a web test channel, with a trace of each turn. Models: offline mock, or an OpenAI-compatible provider (local Ollama, Gemini or Groq free tier). |
 | 18 | Urgent alert types | Phone call through Twilio (text-to-speech) and WhatsApp text message. Set the type and the phone number for each manager in the admin panel. |
 
 ## Open items (TBD)

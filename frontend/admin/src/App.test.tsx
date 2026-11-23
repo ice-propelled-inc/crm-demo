@@ -67,11 +67,14 @@ test("loads the settings and saves a new version", async () => {
   expect(sent.delays.max_total_delay).toBe(30);
 });
 
-test("asks for the tenant when it is missing", () => {
-  window.history.replaceState(null, "", "/admin/");
+test("without a tenant ID the login uses the only tenant", async () => {
+  const assign = vi.fn();
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined });
+  vi.stubGlobal("location", { ...window.location, href: "http://localhost:5173/admin/", search: "", assign });
+  vi.stubGlobal("fetch", vi.fn(() => respond({ detail: "Not logged in" }, 401)));
   render(<App />);
-  expect(screen.getByLabelText("Tenant ID")).toBeDefined();
+  await waitFor(() => expect(assign).toHaveBeenCalled());
+  expect(String(assign.mock.calls[0][0])).toMatch(/^\/auth\/login\?next=/);
 });
 
 test("a 401 sends the user to the CRM login", async () => {
@@ -87,4 +90,11 @@ test("opens the operators section", async () => {
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "Operators" }));
   expect(await screen.findByRole("button", { name: "Add operator" })).toBeDefined();
+});
+
+test("a user without the admin role sees the switch-user banner", async () => {
+  vi.stubGlobal("fetch", vi.fn(() => respond({ detail: "Missing role" }, 403)));
+  render(<App />);
+  expect(await screen.findByRole("alert")).toBeDefined();
+  expect(screen.getByRole("button", { name: "Log in as another user" })).toBeDefined();
 });

@@ -151,3 +151,25 @@ async def test_unknown_tenant(clients: tuple[httpx.AsyncClient, httpx.AsyncClien
 
 async def test_readyz(clients: tuple[httpx.AsyncClient, httpx.AsyncClient]) -> None:
     assert (await clients[0].get("/readyz")).json() == {"status": "ready"}
+
+
+async def test_login_without_tenant_id_uses_the_only_tenant(
+    clients: tuple[httpx.AsyncClient, httpx.AsyncClient], tenant: Tenant, db: AsyncSession
+) -> None:
+    app_client, _ = clients
+    start = await app_client.get("/auth/login", params={"next": "/admin"})
+    assert start.status_code == 302
+    assert start.headers["location"].startswith("http://mock/crm/oauth/authorize?")
+
+    db.add(
+        Tenant(
+            name="Second",
+            crm_base_url="http://x",
+            crm_client_id="c",
+            crm_client_secret_enc=encrypt("s"),
+        )
+    )
+    await db.commit()
+    several = await app_client.get("/auth/login")
+    assert several.status_code == 400
+    assert "?tenant=" in several.json()["detail"]

@@ -16,7 +16,7 @@ EXPECTED_TABLES = {
     "tenants", "tenant_configs", "prompts", "channels", "clients", "conversations",
     "messages", "users", "operators", "urgent_managers", "handoffs", "orders",
     "pending_messages", "catalog_items", "memory_items", "dialog_examples",
-    "language_packs", "processed_events", "jobs",
+    "language_packs", "processed_events", "jobs", "turn_traces",
 }  # fmt: skip
 
 

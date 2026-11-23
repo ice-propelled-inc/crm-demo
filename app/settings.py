@@ -11,11 +11,20 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://chat:chat@localhost:5433/chat"
 
+    # "mock" | "openai_compat" (Ollama, Gemini, Groq: free tests). Claude: build step 11.
     llm_provider: str = "mock"
+    llm_base_url: str = "http://localhost:11434/v1"
     llm_api_key: str = ""
     llm_model_main: str = "claude-sonnet-5-5"
     llm_model_fast: str = "claude-haiku-5-5"
-    embedding_model: str = "mock"
+    llm_timeout_seconds: float = 300.0
+    # OpenAI-compatible "reasoning_effort". "none" switches off thinking (Ollama qwen3).
+    llm_reasoning_effort: str = ""
+    # "mock" | "openai_compat". The model must give 1024 dimensions.
+    embedding_provider: str = "mock"
+    embedding_base_url: str = "http://localhost:11434/v1"
+    embedding_api_key: str = ""
+    embedding_model: str = "mxbai-embed-large"
 
     whatsapp_token: str = ""
     whatsapp_phone_id: str = ""

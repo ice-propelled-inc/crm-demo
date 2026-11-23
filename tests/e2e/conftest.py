@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.channels.base import ChannelAdapter
 from app.adapters.channels.instagram import InstagramAdapter
 from app.adapters.channels.jivo import JivoAdapter
+from app.adapters.channels.webtest import WebTestChannelAdapter
 from app.adapters.crm.generic_http import GenericHttpCRMAdapter
 from app.adapters.embeddings.mock import MockEmbeddingProvider
 from app.adapters.llm.base import LLMResponse, ToolCall
@@ -242,6 +243,8 @@ class World:
 
 def _channel_factory(settings: Settings, http: httpx.AsyncClient) -> Any:
     def build(channel: Channel) -> ChannelAdapter:
+        if channel.kind == "test":
+            return WebTestChannelAdapter()
         creds = channel_credentials(channel)
         if channel.kind == "jivo":
             return JivoAdapter(

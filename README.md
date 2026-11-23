@@ -289,6 +289,67 @@ For local development, mock services replace the CRM (OAuth included), Jivo, Ins
 
 ---
 
+## Test the bot without a paid API
+
+The admin panel has a **Test chat** tab. You write as a client on the web test channel. For each reply, the tab shows what the rules decided: the classifier output, the language, the funnel stage, the handoff check, the topic restriction, the order confirmation, the tools, the model calls, the system prompt and the reply delay. Click a client message to see the decisions of that turn.
+
+### Free model options
+
+| `LLM_PROVIDER` | Result | Cost |
+|---|---|---|
+| `mock` (default) | Offline model. It does not understand text: the classification is neutral and the reply repeats the client message. Use it to check the flow. | Free |
+| `openai_compat` + Ollama | Real answers from a local model on this computer. Without a GPU, one reply takes approximately 30–90 s. | Free, private |
+| `openai_compat` + Gemini or Groq free tier | Real answers, fast. The provider sets rate limits, and it can use free-tier data. | Free tier |
+
+### Procedure (Ollama)
+
+1. Install Ollama from https://ollama.com.
+2. Pull a model with tool support and the embedding model:
+
+```powershell
+ollama pull qwen3:8b
+```
+
+```powershell
+ollama pull mxbai-embed-large
+```
+
+3. Add these lines to `.env`:
+
+```
+LLM_PROVIDER=openai_compat
+LLM_BASE_URL=http://host.docker.internal:11434/v1
+LLM_MODEL_MAIN=qwen3:8b
+LLM_MODEL_FAST=qwen3:8b
+EMBEDDING_PROVIDER=openai_compat
+EMBEDDING_BASE_URL=http://host.docker.internal:11434/v1
+EMBEDDING_MODEL=mxbai-embed-large
+LLM_REASONING_EFFORT=none
+```
+
+`LLM_REASONING_EFFORT=none` switches off the "thinking" of `qwen3`. On a CPU, one model call then takes approximately 10 s, not 55 s.
+
+4. Run `make dev`, then `make seed-dev`. Keep the tenant ID that `make seed-dev` prints.
+5. Open `http://localhost:5173/admin/?tenant=<tenant ID>`. Select `admin-1` on the mock CRM login page. Open **Test chat**.
+
+If the containers cannot connect to Ollama, set the Windows environment variable `OLLAMA_HOST=0.0.0.0`, then start Ollama again.
+
+### Other free providers
+
+- **Gemini**: `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai`, `LLM_API_KEY=<free API key>`, and the model names from the Gemini documentation. Keep `EMBEDDING_PROVIDER=mock`, or use Ollama for the embeddings.
+- **Groq**: `LLM_BASE_URL=https://api.groq.com/openai/v1`, `LLM_API_KEY=<free API key>`, and a Groq model with tool support.
+
+### Notes
+
+- The dev tenant uses the catalog of the mock CRM (Margherita pizza, lemonade).
+- To test a handoff, open the operator chat in a private browser window (`http://localhost:5174/operator/?tenant=<tenant ID>`) and log in as `operator-1`. The two apps use the same login cookie on `localhost`, so one normal window cannot hold two users.
+- The WhatsApp notifications and the Twilio calls go to the mock servers: `http://localhost:8090/_recorded/whatsapp` and `http://localhost:8090/_recorded/twilio`.
+- For quick tests, set all delays to 0 in **Settings**.
+- A test model is not Claude Sonnet 5.5. The rules are the same, but the quality of the answers is different.
+- Only the web test channel keeps the turn traces. Real channels keep no traces.
+
+---
+
 ## Deployment
 
 - The backend is a stateless container. You can add more containers to increase the capacity. Postgres keeps all the state.

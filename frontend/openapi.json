@@ -81,7 +81,8 @@
         "enum": [
           "instagram",
           "jivo",
-          "tidio"
+          "tidio",
+          "test"
         ],
         "title": "ChannelKind",
         "type": "string"
@@ -1185,6 +1186,358 @@
         "title": "TenantSettings",
         "type": "object"
       },
+      "TestChatState": {
+        "properties": {
+          "client_ref": {
+            "title": "Client Ref",
+            "type": "string"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "funnel_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funnel Stage"
+          },
+          "handoff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TestHandoff"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "human_request_count": {
+            "title": "Human Request Count",
+            "type": "integer"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/TestMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "off_topic_count": {
+            "title": "Off Topic Count",
+            "type": "integer"
+          },
+          "oldest_waiting_job_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Waiting Job Seconds"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/TestOrder"
+            },
+            "title": "Orders",
+            "type": "array"
+          },
+          "pending_confirmation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Confirmation"
+          },
+          "queued_turns": {
+            "title": "Queued Turns",
+            "type": "integer"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "thinking_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Since"
+          },
+          "traces": {
+            "items": {
+              "$ref": "#/components/schemas/TestTrace"
+            },
+            "title": "Traces",
+            "type": "array"
+          },
+          "typing_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typing Until"
+          }
+        },
+        "required": [
+          "client_ref",
+          "conversation_id",
+          "state",
+          "language",
+          "funnel_stage",
+          "human_request_count",
+          "off_topic_count",
+          "pending_confirmation",
+          "messages",
+          "traces",
+          "handoff",
+          "orders",
+          "queued_turns",
+          "thinking_since",
+          "typing_until",
+          "oldest_waiting_job_seconds"
+        ],
+        "title": "TestChatState",
+        "type": "object"
+      },
+      "TestHandoff": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "operator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Name"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "trigger",
+          "operator_name",
+          "summary",
+          "alerts"
+        ],
+        "title": "TestHandoff",
+        "type": "object"
+      },
+      "TestMessage": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "sender": {
+            "title": "Sender",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sender",
+          "body",
+          "created_at"
+        ],
+        "title": "TestMessage",
+        "type": "object"
+      },
+      "TestMessageIn": {
+        "properties": {
+          "client_ref": {
+            "title": "Client Ref",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_ref",
+          "text"
+        ],
+        "title": "TestMessageIn",
+        "type": "object"
+      },
+      "TestOrder": {
+        "properties": {
+          "crm_order_id": {
+            "title": "Crm Order Id",
+            "type": "string"
+          },
+          "payment_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Link"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "crm_order_id",
+          "status",
+          "payment_link"
+        ],
+        "title": "TestOrder",
+        "type": "object"
+      },
+      "TestSession": {
+        "properties": {
+          "client_ref": {
+            "title": "Client Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_ref"
+        ],
+        "title": "TestSession",
+        "type": "object"
+      },
+      "TestTrace": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "required": [
+          "id",
+          "message_id",
+          "created_at",
+          "data"
+        ],
+        "title": "TestTrace",
+        "type": "object"
+      },
       "UrgentManagerIn": {
         "properties": {
           "communication_types": {
@@ -2100,6 +2453,115 @@
         ]
       }
     },
+    "/admin/api/test-chat/conversation": {
+      "get": {
+        "operationId": "test_conversation_admin_api_test_chat_conversation_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "client_ref",
+            "required": true,
+            "schema": {
+              "title": "Client Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestChatState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Conversation",
+        "tags": [
+          "admin test chat"
+        ]
+      }
+    },
+    "/admin/api/test-chat/messages": {
+      "post": {
+        "operationId": "send_test_message_admin_api_test_chat_messages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestMessageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Send Test Message Admin Api Test Chat Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Test Message",
+        "tags": [
+          "admin test chat"
+        ]
+      }
+    },
+    "/admin/api/test-chat/sessions": {
+      "post": {
+        "description": "A new test client, so each test conversation starts from zero.",
+        "operationId": "new_session_admin_api_test_chat_sessions_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "New Session",
+        "tags": [
+          "admin test chat"
+        ]
+      }
+    },
     "/admin/api/urgent-managers": {
       "get": {
         "operationId": "list_urgent_managers_admin_api_urgent_managers_get",
@@ -2251,16 +2713,24 @@
     },
     "/auth/login": {
       "get": {
+        "description": "Without `tenant_id`, the only tenant is used (one module instance per CRM).",
         "operationId": "login_auth_login_get",
         "parameters": [
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "format": "uuid",
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {

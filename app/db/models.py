@@ -183,6 +183,21 @@ class Job(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class TurnTrace(Base):
+    """What the rules decided in one agent turn. Kept only for the web test channel."""
+
+    __tablename__ = "turn_traces"
+
+    id: Mapped[uuid.UUID] = _pk()
+    tenant_id: Mapped[uuid.UUID] = _tenant_fk()
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    message_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = _event_time()
+
+
 class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (Index("ix_messages_conversation_created", "conversation_id", "created_at"),)

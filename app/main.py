@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.admin.router import router as admin_router
+from app.admin.test_chat import router as test_chat_router
 from app.auth.router import router as auth_router
 from app.db.session import get_session
 from app.operator.router import router as operator_router
@@ -46,6 +47,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(webhooks_router)
     app.include_router(admin_router)
+    app.include_router(test_chat_router)
     app.include_router(operator_router)
     app.include_router(operator_ws_router)
 

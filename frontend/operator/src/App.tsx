@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, send, tenantId, type Schemas } from "./api/client";
+import { api, send, type Schemas } from "./api/client";
+import { LogoutButton, RoleBanner } from "./RoleBanner";
 
 type Item = Schemas["ConversationItem"];
 type Detail = Schemas["ConversationDetail"];
@@ -195,28 +196,14 @@ export default function App() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const tenant = tenantId();
 
   useEffect(() => {
-    if (!tenant) return;
     api<Item[]>(`/operator/api/conversations?scope=${scope}`).then(setItems, (e) => setError(errorText(e)));
-  }, [tenant, scope, version]);
+  }, [scope, version]);
 
   useEffect(() => {
-    if (tenant) api<Me>("/operator/api/me").then(setMe, () => undefined);
-  }, [tenant]);
-
-  if (!tenant) {
-    return (
-      <div className="layout">
-        <main>
-          <p>
-            Open the link from the WhatsApp notification, or add <code>?tenant=&lt;tenant ID&gt;</code> to the URL.
-          </p>
-        </main>
-      </div>
-    );
-  }
+    api<Me>("/operator/api/me").then(setMe, () => undefined);
+  }, []);
 
   const selected = route.startsWith("/conversations/") ? route.split("/")[2] : null;
   return (
@@ -243,7 +230,9 @@ export default function App() {
             Available for handoffs
           </label>
         )}
+        <LogoutButton />
       </header>
+      <RoleBanner />
       <main>
         {error && <p className="error">{error}</p>}
         {route === "/handoffs" ? (

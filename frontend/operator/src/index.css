@@ -72,3 +72,5 @@ code.wrap { word-break: break-all; font-size: 0.8rem; }
 .composer input { flex: 1; }
 .composer button { margin: 0; }
 @media (max-width: 800px) { .chat { grid-template-columns: 1fr; } }
+header { position: relative; }
+button.logout { position: absolute; right: 20px; top: 12px; margin: 0; background: none; color: var(--accent); }

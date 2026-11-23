@@ -18,11 +18,15 @@ from app.adapters.channels.base import ChannelAdapter
 from app.adapters.channels.instagram import InstagramAdapter
 from app.adapters.channels.jivo import JivoAdapter
 from app.adapters.channels.tidio import TidioAdapter
+from app.adapters.channels.webtest import WebTestChannelAdapter
 from app.adapters.crm.factory import CRMAdapterFactory, build_crm_adapter
 from app.adapters.embeddings.base import EmbeddingProvider
 from app.adapters.embeddings.mock import MockEmbeddingProvider
+from app.adapters.embeddings.openai_compat import OpenAICompatEmbeddingProvider
 from app.adapters.llm.base import LLMProvider
 from app.adapters.llm.mock import MockLLMProvider
+from app.adapters.llm.offline import OfflineLLMProvider
+from app.adapters.llm.openai_compat import OpenAICompatProvider
 from app.adapters.telephony.base import TelephonyClient
 from app.adapters.telephony.mock import MockTelephonyClient
 from app.adapters.telephony.twilio import TwilioTelephonyClient
@@ -86,16 +90,47 @@ def build_channel_adapter(settings: Settings, channel: Channel) -> ChannelAdapte
             app_secret=creds.get("app_secret") or settings.instagram_app_secret,
             http=_shared_http(),
         )
+    if kind is ChannelKind.TEST:
+        return WebTestChannelAdapter()
     return TidioAdapter()
+
+
+@lru_cache
+def _llm_http(timeout: float) -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=timeout)
+
+
+def build_llm(settings: Settings) -> LLMProvider:
+    if settings.llm_provider == "mock":
+        return OfflineLLMProvider(settings.llm_model_fast)
+    if settings.llm_provider == "openai_compat":
+        return OpenAICompatProvider(
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
+            http=_llm_http(settings.llm_timeout_seconds),
+            reasoning_effort=settings.llm_reasoning_effort,
+        )
+    raise RuntimeError(
+        f"LLM provider {settings.llm_provider!r} is not built yet (build step 11). "
+        "Use LLM_PROVIDER=mock or openai_compat."
+    )
+
+
+def build_embedder(settings: Settings) -> EmbeddingProvider:
+    if settings.embedding_provider == "openai_compat":
+        return OpenAICompatEmbeddingProvider(
+            base_url=settings.embedding_base_url,
+            api_key=settings.embedding_api_key,
+            model=settings.embedding_model,
+            http=_llm_http(settings.llm_timeout_seconds),
+        )
+    return MockEmbeddingProvider()
 
 
 def build_deps(settings: Settings) -> Deps:
     """Production dependencies. A provider that is not built yet stays a mock."""
-    if settings.llm_provider != "mock":
-        raise RuntimeError(
-            f"LLM provider {settings.llm_provider!r} is not built yet (build step 11). "
-            "Use LLM_PROVIDER=mock."
-        )
+    llm = build_llm(settings)
+    embedder = build_embedder(settings)
     whatsapp: WhatsAppClient = (
         CloudApiWhatsAppClient(
             api_base=settings.whatsapp_api_base,
@@ -119,8 +154,8 @@ def build_deps(settings: Settings) -> Deps:
     )
     return Deps(
         settings=settings,
-        llm=MockLLMProvider(),
-        embedder=MockEmbeddingProvider(),
+        llm=llm,
+        embedder=embedder,
         crm_factory=build_crm_adapter,
         channel_factory=lambda channel: build_channel_adapter(settings, channel),
         whatsapp=whatsapp,

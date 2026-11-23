@@ -459,6 +459,7 @@ REQUIRED_CREDENTIALS = {
     ChannelKind.JIVO: {"provider_id"},
     ChannelKind.INSTAGRAM: {"access_token"},
     ChannelKind.TIDIO: set(),
+    ChannelKind.TEST: set(),
 }
 
 
