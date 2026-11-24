@@ -39,7 +39,7 @@ All data is saved automatically while the call goes on. Every call is recorded a
 |---|---|
 | Name | Teeth cleaning |
 | Urgent | yes / no |
-| Price range | $80–120 |
+| Price range | CAD 80–120 |
 | Expected duration | 45 min |
 | Doctor speciality | Hygienist |
 
@@ -66,6 +66,7 @@ All data is saved automatically while the call goes on. Every call is recorded a
 | Filled | All required fields are filled and the slot is booked | System |
 | Completed | The patient came to the visit | Administrator (manually) |
 | Cancelled | The appointment was cancelled | System (on caller request) or administrator |
+| Missed | The patient did not come to the visit | Administrator (manually) |
 
 ## 6. AI Rules
 
@@ -182,3 +183,68 @@ Preparation:
 | 8 | UC3: ask for a human | Calls, asks to speak to a person | Live transfer |
 | 9 | UC3: admin does not pick up | Repeat #8, administrator ignores the transfer | AI apologises, Draft saved, call-back promised |
 | 10 | Medical advice | Asks the AI whether to take antibiotics before the visit | AI refuses to advise and offers an appointment |
+
+## 10. Demo Stand Architecture
+
+### 10.1 Components
+
+| Component | Tool | Role |
+|---|---|---|
+| Phone number, call routing | Twilio (number + TwiML Bin) | Rings the administrator for 5 sec, then forwards the call to Vapi |
+| Administrator softphone | Twilio Voice JS SDK | Administrator answers calls and receives AI transfers in the web page |
+| Voice AI agent (UC1, UC3) | Vapi | Speech-to-text (Deepgram), LLM, text-to-speech, tool calls, call transfer |
+| Speech-to-text for UC2 | Deepgram (streaming) | Transcribes the administrator's call from the softphone audio |
+| Backend | Supabase Edge Functions | Receives Vapi events, handles tool calls, runs the UC2 observer LLM, issues temporary Deepgram keys |
+| Storage and push | Supabase Postgres + Realtime | Stores calls, transcripts, call state and bookings; pushes changes to the page |
+| Administrator web page | GitHub Pages (static HTML) + `supabase-js` | Shows schedule, appointments, live call page, recordings and transcripts |
+| Schedule | `schedule.json` in the repo | Three doctors and their working slots; read by the page and by Edge Functions. Bookings are stored in Supabase |
+| Agent config | `agent-config.json` in the repo | Single source for both the Vapi agent and the UC2 observer (see 10.4) |
+
+Secrets (Vapi, Twilio, Deepgram, LLM keys) are kept only in Supabase Edge Functions. The static page holds only the public Supabase anon key with read-only access.
+
+### 10.2 Call routing
+
+```mermaid
+flowchart TD
+    A[Caller dials Twilio number] --> B[TwiML: ring admin softphone, timeout 5 sec]
+    B -- Answered --> UC2[UC2: Admin talks<br/>softphone audio to Deepgram]
+    B -- No answer --> V[Forward to Vapi via SIP<br/>UC1 / UC3]
+    V -- transferCall --> S[Admin softphone]
+    S -- Answered --> UC2
+    S -- No answer --> D[Vapi: apologise, Draft, call-back]
+```
+
+### 10.3 Data flow
+
+**UC1 / UC3 (Vapi talks):**
+1. Vapi sends events (live transcript, status, tool calls, end-of-call report) to a Supabase Edge Function.
+2. The agent calls tools that the Edge Function handles:
+   - `get_free_slots(service, doctor?, date?)` reads `schedule.json` and bookings;
+   - `book_slot(...)`, `reschedule(...)`, `cancel(...)` write bookings;
+   - `find_appointments(phone)` finds existing appointments;
+   - `update_call_state(stage, fields, script_step)` is called after every step and stores the funnel stage, the fields and the script position.
+3. The Edge Function writes to Postgres. Realtime pushes the changes to the page.
+
+**UC2 (administrator talks):**
+1. The page gets a temporary Deepgram key from an Edge Function.
+2. The softphone audio (two channels: administrator and caller) is streamed from the page to Deepgram.
+3. The page sends transcript chunks to an Edge Function.
+4. The observer LLM returns the funnel stage, the fields and the script position. The Edge Function writes them to Postgres, and Realtime pushes them to the page.
+
+### 10.4 Common agent config
+
+`agent-config.json` holds everything shared by the Vapi agent and the UC2 observer:
+- funnel stages and the conversation script;
+- appointment fields and which are required;
+- services (name, urgent, price range, duration, doctor speciality);
+- AI rules (slot selection, no medical advice) and handoff triggers;
+- speech-to-text settings: model, language `en`, key terms (services, doctor names).
+
+Two prompts are built from it:
+
+| Prompt | Used by | Instruction |
+|---|---|---|
+| Agent prompt | Vapi (UC1, UC3) | Talk to the caller, follow the script, call tools |
+| Observer prompt | Edge Function (UC2) | Do not talk; read the transcript, return stage, fields and script position as JSON |
+
+A deploy script pushes the agent prompt, tools and speech-to-text settings to Vapi through its API. The same speech-to-text settings are used for the Deepgram stream in UC2, so transcripts have the same quality in all use-cases.

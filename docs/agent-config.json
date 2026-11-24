@@ -1,0 +1,248 @@
+{
+  "version": 1,
+  "clinic": {
+    "name": "Bright Smile Dental",
+    "language": "en",
+    "timezone": "America/Toronto",
+    "currency": "CAD",
+    "admin_ring_timeout_sec": 5
+  },
+
+  "knowledge_base": {
+    "faq": [
+      { "q": "Where is the clinic?", "a": "120 Main Street, Suite 3, Toronto, Ontario." },
+      { "q": "What are your opening hours?", "a": "Monday to Friday 9 am to 6 pm, Saturday 9 am to 2 pm. Closed on Sunday." },
+      { "q": "Is there parking?", "a": "Yes, free parking behind the building." },
+      { "q": "How can I pay?", "a": "Cash, credit and debit cards." },
+      { "q": "Do you accept insurance?", "a": "Yes, most major dental insurance plans. Please bring your insurance card to the visit." },
+      { "q": "What should I bring to the first visit?", "a": "A photo ID, your insurance card if you have one, and a list of medicines you take." },
+      { "q": "How do I cancel or reschedule?", "a": "Call us at any time and the assistant will help you." }
+    ],
+    "files": []
+  },
+
+  "services": [
+    { "id": "checkup_cleaning", "name": "Check-up and cleaning", "urgent": false, "price_min": 80, "price_max": 150, "duration_min": 45, "speciality": "general" },
+    { "id": "filling", "name": "Tooth filling", "urgent": false, "price_min": 120, "price_max": 250, "duration_min": 60, "speciality": "general" },
+    { "id": "whitening", "name": "Teeth whitening", "urgent": false, "price_min": 300, "price_max": 500, "duration_min": 60, "speciality": "general" },
+    { "id": "emergency", "name": "Emergency visit (severe pain, injury)", "urgent": true, "price_min": 100, "price_max": 200, "duration_min": 30, "speciality": "general" },
+    { "id": "extraction", "name": "Tooth extraction", "urgent": false, "price_min": 150, "price_max": 400, "duration_min": 45, "speciality": "oral_surgery" },
+    { "id": "wisdom_tooth", "name": "Wisdom tooth removal", "urgent": false, "price_min": 300, "price_max": 600, "duration_min": 90, "speciality": "oral_surgery" },
+    { "id": "implant_consult", "name": "Implant consultation", "urgent": false, "price_min": 0, "price_max": 100, "duration_min": 30, "speciality": "oral_surgery" },
+    { "id": "ortho_consult", "name": "Braces and aligners consultation", "urgent": false, "price_min": 0, "price_max": 100, "duration_min": 30, "speciality": "orthodontics" }
+  ],
+
+  "appointment_fields": [
+    { "id": "name", "label": "Patient name", "required": true },
+    { "id": "phone", "label": "Phone", "required": true, "note": "Auto-detected from caller ID; the caller confirms it" },
+    { "id": "service", "label": "Service", "required": true },
+    { "id": "datetime", "label": "Date and time", "required": true },
+    { "id": "patient_type", "label": "New or returning patient", "required": true, "values": ["new", "returning"] },
+    { "id": "complaint", "label": "Complaint", "required": true },
+    { "id": "doctor", "label": "Doctor", "required": false, "note": "If the caller has no preference, assigned automatically later" },
+    { "id": "insurance_number", "label": "Insurance number", "required": false }
+  ],
+
+  "appointment_statuses": [
+    { "id": "draft", "label": "Draft", "meaning": "Data is still being collected, or the call ended before booking" },
+    { "id": "filled", "label": "Filled", "meaning": "All required fields are filled and the slot is booked" },
+    { "id": "completed", "label": "Completed", "meaning": "The patient came to the visit; set by the administrator" },
+    { "id": "cancelled", "label": "Cancelled", "meaning": "The appointment was cancelled" },
+    { "id": "missed", "label": "Missed", "meaning": "The patient did not come to the visit; set by the administrator (Dentitek statusRdv 'M')" }
+  ],
+
+  "funnel_stages": [
+    { "id": "greeting", "label": "Greeting" },
+    { "id": "intent", "label": "Intent" },
+    { "id": "service", "label": "Service and complaint" },
+    { "id": "patient_details", "label": "Patient details" },
+    { "id": "appointment_lookup", "label": "Find existing appointment" },
+    { "id": "slot_selection", "label": "Slot selection" },
+    { "id": "confirmation", "label": "Confirmation" },
+    { "id": "closing", "label": "Closing" },
+    { "id": "handoff", "label": "Handoff to administrator" }
+  ],
+
+  "script": [
+    { "step": "greet", "stage": "greeting", "say": "Hello, thank you for calling Bright Smile Dental. How can I help you today?" },
+    { "step": "ask_intent", "stage": "intent", "goal": "Find out if the caller wants a new appointment, to reschedule, to cancel, or has a question" },
+
+    { "step": "ask_complaint", "stage": "service", "collects": ["complaint"], "say": "What is the reason for your visit?" },
+    { "step": "match_service", "stage": "service", "collects": ["service"], "goal": "Match the complaint to a service; tell the price range and duration if asked" },
+    { "step": "ask_doctor", "stage": "service", "collects": ["doctor"], "say": "Do you have a preferred doctor, or is any available doctor fine?" },
+
+    { "step": "ask_name", "stage": "patient_details", "collects": ["name"], "say": "May I have your full name, please?" },
+    { "step": "confirm_phone", "stage": "patient_details", "collects": ["phone"], "say": "Is {caller_phone} the best number to reach you?" },
+    { "step": "ask_patient_type", "stage": "patient_details", "collects": ["patient_type"], "say": "Have you visited our clinic before?" },
+    { "step": "ask_insurance", "stage": "patient_details", "collects": ["insurance_number"], "say": "Do you have dental insurance? If so, you can tell me the insurance number, or bring the card to the visit." },
+
+    { "step": "lookup_appointment", "stage": "appointment_lookup", "goal": "Find the existing appointment by phone; see rules.appointment_lookup" },
+
+    { "step": "ask_day", "stage": "slot_selection", "say": "Would you like the nearest available day, or do you have a preferred day?" },
+    { "step": "propose_time", "stage": "slot_selection", "collects": ["datetime"], "goal": "Propose a time on that day; if it does not fit, offer three alternatives per rules.slot_selection" },
+
+    { "step": "confirm", "stage": "confirmation", "goal": "Repeat service, doctor, date and time, and patient name; book the slot" },
+    { "step": "close", "stage": "closing", "say": "You are all set. Is there anything else I can help you with? Have a great day!" }
+  ],
+
+  "rules": {
+    "no_medical_advice": "Never give medical advice, diagnoses or medicine recommendations. Say that the doctor will advise during the visit and offer an appointment.",
+    "slot_selection": [
+      "Ask whether the caller wants the nearest available day or a preferred day.",
+      "Propose a time on that day.",
+      "If the time does not fit, propose three alternatives: the same date at another time; the same time on another date; a random free slot within the next one or two days."
+    ],
+    "doctor_choice": "The caller may ask for a specific doctor or only for a service. Without a preference, search all doctors with the service speciality.",
+    "appointment_lookup": [
+      "Search appointments by the caller's phone number.",
+      "If exactly one appointment is found, confirm the patient name and the date.",
+      "If none or more than one is found, ask for the patient name and the date."
+    ],
+    "booking": "Book the slot yourself once all required fields are collected. Do not send an SMS confirmation.",
+    "state_updates": "Call update_call_state after every script step."
+  },
+
+  "handoff": {
+    "triggers": [
+      { "id": "out_of_knowledge_base", "description": "The question is not covered by the knowledge base or the services list" },
+      { "id": "urgent_case", "description": "The caller mentions severe pain, injury, swelling or bleeding" },
+      { "id": "human_requested", "description": "The caller asks to speak to a person" }
+    ],
+    "urgent_case_steps": [
+      "Ask the caller's name.",
+      "Confirm the auto-detected phone number; if not confirmed in one try, ask for the number once.",
+      "Transfer the call even if the phone number was not obtained."
+    ],
+    "say_before_transfer": "I want to make sure you get the best help, so I'll connect you with our administrator now. Please stay on the line.",
+    "admin_no_answer": {
+      "say": "I'm sorry, our administrator is not available right now. I've saved your details and we will call you back as soon as possible.",
+      "save_status": "draft"
+    }
+  },
+
+  "speech_to_text": {
+    "provider": "deepgram",
+    "model": "nova-3",
+    "language": "en",
+    "keyterms": [
+      "Bright Smile Dental",
+      "Carter", "Chen", "Rossi",
+      "check-up", "cleaning", "filling", "whitening", "extraction",
+      "wisdom tooth", "implant", "braces", "aligners", "Invisalign"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "get_free_slots",
+      "description": "Return free slots for a service, optionally for one doctor and from a given date.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "service_id": { "type": "string" },
+          "doctor_id": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "limit": { "type": "integer", "default": 5 }
+        },
+        "required": ["service_id"]
+      }
+    },
+    {
+      "name": "book_slot",
+      "description": "Book a slot and create an appointment with status Filled.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "service_id": { "type": "string" },
+          "doctor_id": { "type": "string" },
+          "start": { "type": "string", "format": "date-time" },
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "patient_type": { "type": "string", "enum": ["new", "returning"] },
+          "complaint": { "type": "string" },
+          "insurance_number": { "type": "string" }
+        },
+        "required": ["service_id", "start", "name", "phone", "patient_type", "complaint"]
+      }
+    },
+    {
+      "name": "find_appointments",
+      "description": "Find active appointments by phone, optionally narrowed by patient name and date.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone": { "type": "string" },
+          "name": { "type": "string" },
+          "date": { "type": "string", "format": "date" }
+        },
+        "required": ["phone"]
+      }
+    },
+    {
+      "name": "reschedule",
+      "description": "Move an existing appointment to a new free slot.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "appointment_id": { "type": "string" },
+          "start": { "type": "string", "format": "date-time" },
+          "doctor_id": { "type": "string" }
+        },
+        "required": ["appointment_id", "start"]
+      }
+    },
+    {
+      "name": "cancel",
+      "description": "Cancel an existing appointment.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "appointment_id": { "type": "string" }
+        },
+        "required": ["appointment_id"]
+      }
+    },
+    {
+      "name": "update_call_state",
+      "description": "Report the current funnel stage, script step and collected fields. Call after every script step.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "stage": { "type": "string", "enum": ["greeting", "intent", "service", "patient_details", "appointment_lookup", "slot_selection", "confirmation", "closing", "handoff"] },
+          "script_step": { "type": "string" },
+          "fields": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "phone": { "type": "string" },
+              "service": { "type": "string" },
+              "datetime": { "type": "string" },
+              "patient_type": { "type": "string" },
+              "complaint": { "type": "string" },
+              "doctor": { "type": "string" },
+              "insurance_number": { "type": "string" }
+            }
+          },
+          "handoff_reason": { "type": "string", "enum": ["out_of_knowledge_base", "urgent_case", "human_requested"] }
+        },
+        "required": ["stage", "script_step"]
+      }
+    },
+    {
+      "name": "transfer_to_admin",
+      "description": "Transfer the call live to the administrator softphone. Maps to Vapi transferCall.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "reason": { "type": "string", "enum": ["out_of_knowledge_base", "urgent_case", "human_requested"] }
+        },
+        "required": ["reason"]
+      }
+    }
+  ],
+
+  "prompts": {
+    "agent": "You are the phone assistant of {clinic.name}. Talk to the caller in English, follow the script, the rules and the handoff triggers, use only the knowledge base and the services list, and call the tools.",
+    "observer": "You observe a phone call between the clinic administrator and a caller. Do not talk. Read the transcript and return JSON with the current stage, script_step and the collected fields, using the same stages, script and fields as the agent."
+  }
+}
