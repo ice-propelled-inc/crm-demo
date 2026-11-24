@@ -13,7 +13,7 @@ const TRANSFER_RING_SEC = 20;
 const VAPI_SDK = 'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.7.1/+esm';
 
 const S = {
-  sb: null, ch: null, config: null,
+  sb: null, ch: null, config: null, business: 'dental',
   phase: 'idle',            // idle | ringing | admin | ai | transfer-ring | ended
   callId: null, mic: null, pc: null, vapi: null, stateCh: null, timer: null,
   speaking: false, lastSpeechEnd: 0, transferPending: false,
@@ -73,7 +73,7 @@ const send = (event, payload) => FakeCall.send(S.ch, event, { call_id: S.callId,
 
 function ring(transfer) {
   S.phase = transfer ? 'transfer-ring' : 'ringing';
-  send('ring', { phone: $('#phone').value.trim(), transfer });
+  send('ring', { phone: $('#phone').value.trim(), transfer, business: S.business });
   const sec = transfer ? TRANSFER_RING_SEC : S.config.clinic.admin_ring_timeout_sec;
   S.timer = setTimeout(transfer ? transferFailed : noAdmin, sec * 1000);
   setStatus(transfer ? 'Transferring to the administrator…' : 'Ringing…', 'warn');
@@ -122,7 +122,10 @@ async function noAdmin() {
 }
 
 async function startVapi() {
-  if (!CFG.vapiPublicKey || !CFG.vapiAssistantId) throw new Error('Set vapiPublicKey and vapiAssistantId in config.js');
+  const assistantId = S.business === 'dental' ? CFG.vapiAssistantId : CFG.vapiAssistants?.[S.business];
+  if (!CFG.vapiPublicKey || !assistantId) {
+    throw new Error(`Set vapiPublicKey and the ${S.business} assistant id in config.js (scripts/deploy_vapi_assistant.py --business ${S.business})`);
+  }
   const mod = await import(VAPI_SDK);
   const Vapi = mod.default?.default || mod.default;
   const vapi = new Vapi(CFG.vapiPublicKey);
@@ -145,7 +148,7 @@ async function startVapi() {
     .subscribe();
 
   // metadata.call_id lets vapi-webhook attach the Vapi call to this calls row.
-  await vapi.start(CFG.vapiAssistantId, { metadata: { call_id: S.callId } });
+  await vapi.start(assistantId, { metadata: { call_id: S.callId } });
 }
 
 // Wait until the assistant has finished the handoff phrase, then hand the call over.
@@ -195,7 +198,7 @@ async function startCall() {
     S.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     S.phase = 'ringing';
     setStatus('Connecting…', 'warn');
-    S.callId = (await fn('fake-call', { action: 'start', phone: $('#phone').value.trim() })).call_id;
+    S.callId = (await fn('fake-call', { action: 'start', phone: $('#phone').value.trim(), business: S.business })).call_id;
     S.transferPending = false;
     ring(false);
   } catch (e) {
@@ -226,7 +229,13 @@ async function finish(reason) {
 
 async function init() {
   try {
-    S.config = await fetch('agent-config.json').then(r => r.json());
+    // ?biz=<id> picks the business set (businesses/index.json), dental by default.
+    let list = [{ id: 'dental', path: '.' }];
+    try { list = await fetch('businesses/index.json').then(r => r.json()); } catch (_) { /* dental only */ }
+    const biz = list.find(b => b.id === new URLSearchParams(location.search).get('biz')) || list[0];
+    S.business = biz.id;
+    S.config = await fetch(`${biz.path}/agent-config.json`).then(r => r.json());
+    S.config.clinic = S.config.clinic || S.config.business;
     $('#clinicName').textContent = `Call ${S.config.clinic.name}`;
   } catch (e) {
     toast('Cannot load agent-config.json'); return;

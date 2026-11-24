@@ -20,12 +20,21 @@ const Replay = {
     render();
   },
 
+  // Scenario buttons come from replay.json when the business set has one.
+  setupBar() {
+    if (!App.replay) return;
+    document.getElementById('scenarioButtons').innerHTML = App.replay.scenarios
+      .map(s => `<button data-scenario="${esc(s.id)}">${esc(s.label)}</button>`).join('');
+  },
+
   async start(name) {
     this.stop();
     const run = this.run;
     App.view = 'calls';
     try {
-      await SCENARIOS[name](makeCtx(run));
+      const scripted = App.replay?.scenarios.find(s => s.id === name);
+      if (scripted) await runScripted(scripted, makeCtx(run));
+      else await SCENARIOS[name](makeCtx(run));
     } catch (e) {
       if (e.message !== 'replay-stopped') { console.error(e); toast('Replay error: ' + e.message); }
     }
@@ -42,9 +51,12 @@ function makeCtx(run) {
 
   // Mirror collected fields into the appointment, as the backend does: Draft while collecting.
   const syncAppointment = fields => {
-    const map = { service: 'service_id', doctor: 'doctor_id', name: 'name', phone: 'phone', patient_type: 'patient_type', complaint: 'complaint', insurance_number: 'insurance_number' };
+    const map = { service: 'service_id', [L('resource_field')]: 'doctor_id', datetime: null };
     const patch = {};
-    for (const [k, v] of Object.entries(fields)) if (map[k]) patch[map[k]] = v;
+    for (const [k, v] of Object.entries(fields)) {
+      const col = k in map ? map[k] : k;
+      if (col) patch[col] = v;
+    }
     if (!apptCreated && !patch.service_id) return;
     if (!apptCreated) { apptCreated = true; patch.status = 'draft'; patch.call_id = callId; }
     Store.upsertAppointment({ id: apptId, ...patch });
@@ -290,6 +302,118 @@ async function urgentHandoff(c, adminAnswers) {
   await c.say('caller', 'Thanks a lot.');
   await c.wait(800);
   c.end('handoff');
+}
+
+/* ---------- Scripted scenarios from replay.json (non-dental business sets) ----------
+ * A scenario is { id, label, phone, steps: [...] }. Steps:
+ *   { "ring": "ai" }            ring for admin_ring_timeout_sec, then the AI assistant answers
+ *   { "ring": "admin" }         ring briefly, then the administrator answers
+ *   { "ai" | "caller" | "admin": "text" }   one utterance
+ *   { "system": "text" }
+ *   { "state": "stage/step", "fields": {...}, "handoff_reason": "..." }
+ *   { "slot": { "name", "service", "resource"?, "from_day"?, "time"?, "asap_min"? } }
+ *        nearest free slot of the service (for one resource or any resource with the service speciality);
+ *        asap_min books today at now + asap_min, outside working hours too (24/7 emergencies)
+ *   { "book": "<slot name>" }   book the slot with status Filled
+ *   { "transfer": "answer" | "no_answer", "label": "..." }   AI hands the call over
+ *   { "end": "booked" | "handoff" | "callback" | ... }
+ * Placeholders in texts and field values: {phone}, {script:<step id>}, {say_before_transfer},
+ * {admin_no_answer}, {<slot>} (date and time), {<slot>.date}, {<slot>.time}, {<slot>.iso}, {<slot>.resource}.
+ */
+
+function findSlot(o) {
+  const svc = serviceById(o.service);
+  const docs = o.resource ? [doctorById(o.resource)] : doctorsFor(svc.speciality);
+  if (o.asap_min != null) {
+    const step = App.schedule.slot_step_min;
+    const m = Math.ceil((nowMin() + o.asap_min) / step) * step;
+    return { d: startOfDay(new Date()), m: Math.min(m, 24 * 60 - svc.duration_min), doc: docs[0], svc };
+  }
+  // With "time": the first day from from_day where that time is free.
+  const atTime = (doc, from) => {
+    for (let i = from; i < from + 21; i++) {
+      const d = addDays(new Date(), i);
+      if (isFree(doc, d, toMin(o.time), svc.duration_min)) return { d, m: toMin(o.time) };
+    }
+    return null;
+  };
+  let best = null;
+  for (const doc of docs) {
+    const s = o.time ? atTime(doc, o.from_day ?? 1) : firstFree(doc, o.from_day ?? 1, svc.duration_min);
+    if (s && (!best || s.d < best.d || (+s.d === +best.d && s.m < best.m))) best = { ...s, doc, svc };
+  }
+  if (!best) throw new Error(`No free slot for ${o.service}`);
+  return best;
+}
+
+async function runScripted(sc, c) {
+  const cfg = App.config;
+  const slots = {};
+  const fill = v => typeof v !== 'string' ? v : v.replace(/\{([\w.:]+)\}/g, (all, key) => {
+    if (key === 'phone') return sc.phone;
+    if (key === 'say_before_transfer') return cfg.handoff.say_before_transfer;
+    if (key === 'admin_no_answer') return cfg.handoff.admin_no_answer.say;
+    if (key.startsWith('script:')) return (cfg.script.find(s => s.step === key.slice(7))?.say || '').replace('{caller_phone}', sc.phone);
+    const [name, part] = key.split('.');
+    const s = slots[name];
+    if (!s) return all;
+    if (!part) return at(s);
+    return { date: fmtDate(s.d), time: fmtTime12(s.m), iso: localIso(s.d, s.m), resource: s.doc.name, resource_id: s.doc.id }[part] ?? all;
+  });
+  const fillObj = o => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, fill(v)]));
+  const ring = cfg.clinic.admin_ring_timeout_sec;
+
+  for (const st of sc.steps) {
+    if (st.ring === 'ai') {
+      await c.ring(sc.phone, ring);
+      c.mode('ai');
+      c.system(`No answer in ${ring} s, the AI assistant answered`);
+    } else if (st.ring === 'admin') {
+      Store.upsertCall({ id: c.callId, phone: sc.phone, started_at: new Date().toISOString(), status: 'ringing', mode: 'ringing' });
+      App.incoming = { phone: sc.phone, label: 'Incoming call', ringUntil: Date.now() + ring * 1000 / Replay.speed, canAnswer: false };
+      render();
+      await c.wait(2000);
+      App.incoming = null;
+      c.mode('admin');
+      c.system(`${L('admin')} answered. The AI assistant is listening and transcribing.`);
+    } else if (st.ai || st.caller || st.admin) {
+      const speaker = st.ai ? 'ai' : st.caller ? 'caller' : 'admin';
+      await c.say(speaker, fill(st[speaker]));
+    } else if (st.system) {
+      c.system(fill(st.system));
+    } else if (st.state) {
+      const [stage, step] = st.state.split('/');
+      const extra = st.handoff_reason ? { handoff_reason: st.handoff_reason } : {};
+      c.state(stage, step, fillObj(st.fields), extra);
+      if (st.handoff_reason) Store.upsertCall({ id: c.callId, handoff_reason: st.handoff_reason });
+    } else if (st.slot) {
+      slots[st.slot.name] = findSlot(st.slot);
+    } else if (st.book) {
+      const s = slots[st.book];
+      c.book(s.doc.id, s.d, s.m, s.svc.duration_min);
+    } else if (st.transfer) {
+      c.mode('transferring');
+      c.system(`Transferring the call to the ${L('admin').toLowerCase()}`);
+      App.incoming = { phone: sc.phone, label: st.label || 'Transfer from AI assistant', ringUntil: null, canAnswer: false };
+      render();
+      if (st.transfer === 'answer') {
+        await c.wait(3000);
+        App.incoming = null;
+        c.mode('admin');
+        c.system(`${L('admin')} joined. Collected data and transcript are on this page.`);
+      } else {
+        await c.wait(8000);
+        App.incoming = null;
+        c.mode('ai');
+        c.system(`The ${L('admin').toLowerCase()} did not pick up`);
+        await c.say('ai', cfg.handoff.admin_no_answer.say);
+        c.saveDraft();
+      }
+    } else if (st.end) {
+      await c.wait(800);
+      c.end(st.end);
+    }
+  }
 }
 
 /* ---------- Replay bar ---------- */

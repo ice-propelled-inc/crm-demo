@@ -1,0 +1,6 @@
+[
+  { "id": "dental", "label": "Dental clinic", "path": "." },
+  { "id": "sushi", "label": "Sushi restaurant", "path": "businesses/sushi", "replay": true },
+  { "id": "plumber", "label": "Plumber (1 technician)", "path": "businesses/plumber", "replay": true },
+  { "id": "locksmith", "label": "Locksmith (3 technicians)", "path": "businesses/locksmith", "replay": true }
+]

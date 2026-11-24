@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "timezone": "America/Toronto",
+  "slot_step_min": 15,
+  "booking_horizon_days": 14,
+  "business_hours": {
+    "mon": null,
+    "tue": ["11:30", "22:00"],
+    "wed": ["11:30", "22:00"],
+    "thu": ["11:30", "22:00"],
+    "fri": ["11:30", "22:00"],
+    "sat": ["11:30", "22:00"],
+    "sun": ["11:30", "22:00"]
+  },
+  "columns": [
+    { "idOptCol": 1, "name": "Delivery" },
+    { "idOptCol": 2, "name": "Pickup counter" },
+    { "idOptCol": 3, "name": "Dining room" }
+  ],
+  "resources": [
+    {
+      "id": "courier_kenji",
+      "name": "Kenji (courier)",
+      "speciality": "delivery",
+      "speciality_label": "Delivery",
+      "idOptCols": [1],
+      "working_hours": {
+        "tue": ["11:30", "22:00"], "wed": ["11:30", "22:00"], "thu": ["11:30", "22:00"],
+        "fri": ["11:30", "22:00"], "sat": ["11:30", "22:00"], "sun": ["11:30", "22:00"]
+      },
+      "busy": [
+        { "days": ["tue", "wed", "thu", "fri", "sat", "sun"], "from": "15:00", "to": "15:30", "label": "Break" },
+        { "days": ["fri", "sat"], "from": "18:00", "to": "19:30", "label": "Booked" },
+        { "days": ["tue", "thu"], "from": "12:00", "to": "13:00", "label": "Booked" }
+      ]
+    },
+    {
+      "id": "courier_lena",
+      "name": "Lena (courier)",
+      "speciality": "delivery",
+      "speciality_label": "Delivery, evenings",
+      "idOptCols": [1],
+      "working_hours": {
+        "wed": ["16:00", "22:00"], "thu": ["16:00", "22:00"], "fri": ["16:00", "22:00"],
+        "sat": ["16:00", "22:00"], "sun": ["16:00", "22:00"]
+      },
+      "busy": [
+        { "days": ["fri", "sat"], "from": "17:30", "to": "19:00", "label": "Booked" },
+        { "days": ["sun"], "from": "18:00", "to": "18:45", "label": "Booked" }
+      ]
+    },
+    {
+      "id": "pickup_counter",
+      "name": "Pickup counter",
+      "speciality": "pickup",
+      "speciality_label": "Pickup orders",
+      "idOptCols": [2],
+      "working_hours": {
+        "tue": ["11:30", "22:00"], "wed": ["11:30", "22:00"], "thu": ["11:30", "22:00"],
+        "fri": ["11:30", "22:00"], "sat": ["11:30", "22:00"], "sun": ["11:30", "22:00"]
+      },
+      "busy": [
+        { "days": ["tue", "wed", "thu", "fri"], "from": "12:00", "to": "12:45", "label": "Booked" },
+        { "days": ["fri", "sat", "sun"], "from": "18:00", "to": "18:30", "label": "Booked" }
+      ]
+    },
+    {
+      "id": "table_2",
+      "name": "Table 1 · 2 seats",
+      "speciality": "dine_in",
+      "speciality_label": "Dine-in, 2 guests",
+      "capacity": 2,
+      "idOptCols": [3],
+      "working_hours": {
+        "tue": ["11:30", "22:00"], "wed": ["11:30", "22:00"], "thu": ["11:30", "22:00"],
+        "fri": ["11:30", "22:00"], "sat": ["11:30", "22:00"], "sun": ["11:30", "22:00"]
+      },
+      "busy": [
+        { "days": ["fri", "sat"], "from": "19:00", "to": "20:30", "label": "Reserved" }
+      ]
+    },
+    {
+      "id": "table_4",
+      "name": "Table 2 · 4 seats",
+      "speciality": "dine_in",
+      "speciality_label": "Dine-in, up to 4 guests",
+      "capacity": 4,
+      "idOptCols": [3],
+      "working_hours": {
+        "tue": ["11:30", "22:00"], "wed": ["11:30", "22:00"], "thu": ["11:30", "22:00"],
+        "fri": ["11:30", "22:00"], "sat": ["11:30", "22:00"], "sun": ["11:30", "22:00"]
+      },
+      "busy": [
+        { "days": ["sat"], "from": "18:30", "to": "20:00", "label": "Reserved" },
+        { "days": ["thu"], "from": "12:00", "to": "13:30", "label": "Reserved" }
+      ]
+    },
+    {
+      "id": "table_6",
+      "name": "Table 3 · 6 seats",
+      "speciality": "dine_in",
+      "speciality_label": "Dine-in, up to 6 guests",
+      "capacity": 6,
+      "idOptCols": [3],
+      "working_hours": {
+        "tue": ["11:30", "22:00"], "wed": ["11:30", "22:00"], "thu": ["11:30", "22:00"],
+        "fri": ["11:30", "22:00"], "sat": ["11:30", "22:00"], "sun": ["11:30", "22:00"]
+      },
+      "busy": [
+        { "days": ["fri"], "from": "19:00", "to": "20:30", "label": "Reserved" },
+        { "days": ["sun"], "from": "12:30", "to": "14:00", "label": "Reserved" }
+      ]
+    }
+  ]
+}

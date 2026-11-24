@@ -2,13 +2,13 @@
 // Fake page-to-page call (docs/crm-demo-local/caller.html): keeps the calls table in the same states
 // as twilio-voice does for a real call. Audio goes browser-to-browser over WebRTC (signalling over
 // Supabase Realtime Broadcast) or to the Vapi assistant as a Vapi web call.
-//   start     { phone }   -> { call_id }  new call, ringing the administrator
+//   start     { phone, business } -> { call_id }  new call, ringing the administrator
 //   ai        { call_id }                 no answer, the AI assistant answers
 //   answered  { call_id }                 the administrator answered (first ring or transfer)
 //   transfer  { call_id }                 the AI hands the call over, ring the administrator again
 //   no-answer { call_id } -> { say }      the administrator missed the transfer: Draft, call back later
 //   end       { call_id }                 the call ended
-import { CORS, db, json, loadConfig, pinError, systemMessage } from "../_shared/common.ts";
+import { CORS, db, json, loadConfig, loadConfigForCall, normBiz, pinError, systemMessage } from "../_shared/common.ts";
 import { ensureDraft } from "../_shared/tools.ts";
 
 async function markEnded(callId: string, outcome?: string) {
@@ -28,14 +28,14 @@ Deno.serve(async (req) => {
   if (denied) return denied;
 
   try {
-    const { action, call_id: callId, phone } = await req.json();
+    const { action, call_id: callId, phone, business } = await req.json();
     if (action !== "start" && !callId) return json({ error: "call_id is required" }, 400);
-    const { config } = await loadConfig();
+    const { config } = action === "start" ? await loadConfig(normBiz(business)) : await loadConfigForCall(callId);
 
     switch (action) {
       case "start": {
         const { data, error } = await db.from("calls")
-          .insert({ phone: phone || null, status: "ringing", mode: "ringing" }).select("id").single();
+          .insert({ phone: phone || null, business: normBiz(business), status: "ringing", mode: "ringing" }).select("id").single();
         if (error) throw new Error(error.message);
         return json({ call_id: data.id });
       }

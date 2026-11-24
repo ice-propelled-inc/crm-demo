@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "timezone": "America/Toronto",
+  "slot_step_min": 30,
+  "booking_horizon_days": 14,
+  "travel_buffer_min": 30,
+  "emergency_hours": "24/7",
+  "business_hours": {
+    "mon": ["08:00", "18:00"],
+    "tue": ["08:00", "18:00"],
+    "wed": ["08:00", "18:00"],
+    "thu": ["08:00", "18:00"],
+    "fri": ["08:00", "18:00"],
+    "sat": ["09:00", "14:00"],
+    "sun": null
+  },
+  "columns": [
+    { "idOptCol": 1, "name": "Van 1" }
+  ],
+  "resources": [
+    {
+      "id": "tech_mike",
+      "name": "Mike Novak",
+      "speciality": "plumbing",
+      "speciality_label": "Licensed plumber (owner)",
+      "idOptCols": [1],
+      "working_hours": {
+        "mon": ["08:00", "18:00"],
+        "tue": ["08:00", "18:00"],
+        "wed": ["08:00", "18:00"],
+        "thu": ["08:00", "18:00"],
+        "fri": ["08:00", "18:00"],
+        "sat": ["09:00", "14:00"]
+      },
+      "busy": [
+        { "days": ["mon", "tue", "wed", "thu", "fri"], "from": "12:30", "to": "13:00", "label": "Lunch" },
+        { "days": ["mon", "wed"], "from": "08:00", "to": "10:30", "label": "Booked job" },
+        { "days": ["tue"], "from": "13:30", "to": "16:00", "label": "Booked job" },
+        { "days": ["thu"], "from": "08:30", "to": "11:00", "label": "Booked job" },
+        { "days": ["fri"], "from": "14:00", "to": "16:30", "label": "Booked job" },
+        { "days": ["sat"], "from": "09:00", "to": "11:00", "label": "Booked job" }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,8 @@ const App = {
   mode: 'replay',
   incoming: null,        // { phone, label, ringUntil, canAnswer, onAnswer, onDecline }
   apptFilter: 'upcoming',
+  business: null,        // entry of businesses/index.json
+  replay: null,          // replay.json of the business (scripted calls); null -> built-in dental scenarios
 };
 
 /* ---------- Helpers ---------- */
@@ -33,6 +35,13 @@ const parseDate = s => { const [y, m, d] = s.slice(0, 10).split('-').map(Number)
 const startOfDay = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
 const addDays = (d, n) => { const x = startOfDay(d); x.setDate(x.getDate() + n); return x; };
 const fmtDate = d => d.toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' });
+// Wording that differs per business (agent-config.json "labels"); defaults are the dental ones.
+const LABEL_DEFAULTS = {
+  business: 'Clinic', resource: 'Doctor', resources: 'Doctors', customer: 'Patient',
+  booking: 'Appointment', bookings: 'Appointments', admin: 'Administrator', logo: 'BS',
+  resource_field: 'doctor', closed: 'The clinic is closed on this day.',
+};
+const L = k => App.config?.labels?.[k] ?? LABEL_DEFAULTS[k];
 const weekday = d => d.toLocaleDateString('en-CA', { weekday: 'long' });
 const fmtTime12 = m => {
   let h = Math.floor(m / 60); const mm = m % 60; const ap = h >= 12 ? 'pm' : 'am';
@@ -89,7 +98,9 @@ function isFree(doc, date, from, dur) {
   if (!w || from < w[0] || from + dur > w[1]) return false;
   if (dateKey(date) === dateKey(new Date()) && from <= nowMin()) return false;
   if (startOfDay(date) < startOfDay(new Date())) return false;
-  return ![...busyBlocks(doc, date), ...bookedBlocks(doc.id, date)].some(b => from < b.to && from + dur > b.from);
+  // Field services keep travel_buffer_min free before and after every job and busy block.
+  const buf = App.schedule.travel_buffer_min || 0;
+  return ![...busyBlocks(doc, date), ...bookedBlocks(doc.id, date)].some(b => from < b.to + buf && from + dur + buf > b.from);
 }
 
 function freeSlots(doc, date, dur) {
@@ -138,7 +149,9 @@ const Store = {
     render();
   },
   upsertAppointment(a) {
-    App.appointments.set(a.id, { ...(App.appointments.get(a.id) || {}), ...a });
+    // Live rows keep fields without their own column (address, order items...) in details.
+    const { details, ...cols } = a;
+    App.appointments.set(a.id, { ...(App.appointments.get(a.id) || {}), ...(details || {}), ...cols });
     render();
   },
 };
@@ -195,7 +208,7 @@ const reasonLabel = id => App.config.handoff.triggers.find(t => t.id === id)?.de
 function fieldValue(id, v) {
   if (v == null || v === '') return '';
   if (id === 'service') return serviceById(v)?.name || v;
-  if (id === 'doctor') return doctorById(v)?.name || v;
+  if (id === L('resource_field')) return doctorById(v)?.name || v;
   if (id === 'datetime') return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) ? fmtDateTime(v) : v;
   if (id === 'patient_type') return v === 'new' ? 'New patient' : v === 'returning' ? 'Returning patient' : v;
   return v;
@@ -206,7 +219,7 @@ function messagesHtml(callId) {
   if (!list.length) return '<div class="muted">No messages yet.</div>';
   return list.map(m => m.speaker === 'system'
     ? `<div class="msg system">${esc(m.text)}</div>`
-    : `<div class="msg ${esc(m.speaker)}"><div class="who">${esc(SPEAKER[m.speaker] || m.speaker)}</div>${esc(m.text)}</div>`
+    : `<div class="msg ${esc(m.speaker)}"><div class="who">${esc(m.speaker === 'admin' ? L('admin') : SPEAKER[m.speaker] || m.speaker)}</div>${esc(m.text)}</div>`
   ).join('');
 }
 
@@ -252,13 +265,13 @@ function viewCalls() {
       <span class="phone">${esc(call.phone)}</span>
       <span class="pill ${modeCls}">${esc(modeText)}</span>
       <span class="timer">${fmtDuration(end - new Date(call.started_at))}</span>
-      ${appt ? `<span class="pill ${STATUS_CLASS[appt.status] || ''}">Appointment: ${esc(statusLabel(appt.status))}</span>` : ''}
+      ${appt ? `<span class="pill ${STATUS_CLASS[appt.status] || ''}">${esc(L('booking'))}: ${esc(statusLabel(appt.status))}</span>` : ''}
     </div>
     ${reason ? `<div class="banner"><b>Handoff:</b> ${esc(reasonLabel(reason))}</div>` : ''}
     <div class="call-grid">
       <div class="call-side">
         <div class="panel"><h3>Funnel stage</h3><div class="stages">${stages}</div></div>
-        <div class="panel"><h3>Appointment fields</h3><div class="fields">${fields}</div></div>
+        <div class="panel"><h3>${esc(L('booking'))} fields</h3><div class="fields">${fields}</div></div>
         <div class="panel"><h3>Script</h3><ul class="script">${script}</ul></div>
       </div>
       <div class="panel transcript"><h3>Conversation</h3><div class="messages">${messagesHtml(call.id)}</div></div>
@@ -282,12 +295,12 @@ function viewSchedule() {
         <span style="--c: var(--surface-2)">Not working</span>
       </div>
     </div>`;
-  if (!hours) return `<h2>Schedule</h2>${toolbar}<div class="empty">The clinic is closed on this day.</div>`;
+  if (!hours) return `<h2>Schedule</h2>${toolbar}<div class="empty">${esc(L('closed'))}</div>`;
 
   const docs = App.schedule.doctors;
   const step = App.schedule.slot_step_min;
   const [open, close] = hours.map(toMin);
-  const head = `<tr><th>Time</th>${docs.map(doc => `<th>${esc(doc.name)}<div class="muted">${esc(doc.speciality_label)} · ${esc(doc.idOptCols.map(columnName).join(', '))}</div></th>`).join('')}</tr>`;
+  const head = `<tr><th>Time</th>${docs.map(doc => `<th>${esc(doc.name)}<div class="muted">${esc([doc.speciality_label, (doc.idOptCols || []).map(columnName).join(', ')].filter(Boolean).join(' · '))}</div></th>`).join('')}</tr>`;
   const blocks = docs.map(doc => ({ doc, w: workRange(doc, d), busy: busyBlocks(doc, d), booked: bookedBlocks(doc.id, d) }));
   let rows = '';
   for (let m = open; m < close; m += step) {
@@ -299,7 +312,7 @@ function viewSchedule() {
       if (!b.w || m < b.w[0] || m >= b.w[1]) rows += '<td class="off"></td>';
       else if (booked) {
         const a = booked.appt;
-        const label = booked.from === m ? `${a.name || 'Patient'} · ${serviceById(a.service_id)?.name || ''}${a.status === 'draft' ? ' (draft)' : ''}` : '';
+        const label = booked.from === m ? `${a.name || L('customer')} · ${serviceById(a.service_id)?.name || ''}${a.status === 'draft' ? ' (draft)' : ''}` : '';
         rows += `<td class="booked" title="${esc(label)}">${esc(label)}</td>`;
       } else if (busy) rows += `<td class="busy">${busy.from === m ? esc(busy.label) : ''}</td>`;
       else rows += '<td class="free"></td>';
@@ -307,6 +320,14 @@ function viewSchedule() {
     rows += '</tr>';
   }
   return `<h2>Schedule</h2>${toolbar}<div class="panel grid-wrap"><table class="sched">${head}${rows}</table></div>`;
+}
+
+// Booking fields without their own column, e.g. complaint, address, order items.
+function detailsHtml(a) {
+  const own = ['name', 'phone', 'service', 'datetime', L('resource_field')];
+  const rows = App.config.appointment_fields.filter(f => !own.includes(f.id) && a[f.id] != null && a[f.id] !== '')
+    .map(f => `<div><span class="muted">${esc(f.label)}:</span> ${esc(fieldValue(f.id, a[f.id]))}</div>`);
+  return rows.join('') || '—';
 }
 
 function viewAppointments() {
@@ -319,9 +340,9 @@ function viewAppointments() {
     <tr>
       <td>${esc(a.start ? fmtDateTime(a.start) : '—')}</td>
       <td>${esc(a.name || '—')}<div class="muted">${esc(a.phone || '')}</div></td>
-      <td>${esc(serviceById(a.service_id)?.name || a.service_id || '—')}<div class="muted">${esc(a.complaint || '')}</div></td>
+      <td>${esc(serviceById(a.service_id)?.name || a.service_id || '—')}</td>
       <td>${esc(doctorById(a.doctor_id)?.name || (a.doctor_id ? a.doctor_id : 'Assigned later'))}</td>
-      <td>${esc(a.patient_type === 'new' ? 'New' : a.patient_type === 'returning' ? 'Returning' : '—')}${a.insurance_number ? `<div class="muted">Ins. ${esc(a.insurance_number)}</div>` : ''}</td>
+      <td>${detailsHtml(a)}</td>
       <td>
         <select class="status" data-act="status" data-id="${esc(a.id)}">
           ${opts.map(o => `<option value="${o.id}" ${o.id === a.status ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
@@ -329,7 +350,7 @@ function viewAppointments() {
       </td>
     </tr>`).join('');
   return `
-    <h2>Appointments</h2>
+    <h2>${esc(L('bookings'))}</h2>
     <div class="toolbar">
       <select data-act="apptFilter">
         <option value="upcoming" ${App.apptFilter === 'upcoming' ? 'selected' : ''}>Upcoming</option>
@@ -337,8 +358,8 @@ function viewAppointments() {
       </select>
     </div>
     ${list.length ? `<div class="panel grid-wrap"><table class="list">
-      <tr><th>Date and time</th><th>Patient</th><th>Service</th><th>Doctor</th><th>Patient type</th><th>Status</th></tr>${rows}
-    </table></div>` : '<div class="empty">No appointments yet.</div>'}`;
+      <tr><th>Date and time</th><th>${esc(L('customer'))}</th><th>Service</th><th>${esc(L('resource'))}</th><th>Details</th><th>Status</th></tr>${rows}
+    </table></div>` : `<div class="empty">No ${esc(L('bookings').toLowerCase())} yet.</div>`}`;
 }
 
 function viewHistory() {
@@ -372,14 +393,20 @@ function viewSettings() {
     <td>${esc(s.name)}</td><td>${s.urgent ? '<span class="pill bad">Urgent</span>' : 'No'}</td>
     <td>${esc(c.clinic.currency)} ${s.price_min}–${s.price_max}</td><td>${s.duration_min} min</td><td>${esc(s.speciality)}</td></tr>`).join('');
   const doctors = App.schedule.doctors.map(d => `<tr>
-    <td>${esc(d.name)}</td><td>${esc(d.speciality_label)}</td><td>${esc(d.idOptCols.map(columnName).join(', '))}</td>
+    <td>${esc(d.name)}</td><td>${esc(d.speciality_label)}</td><td>${esc((d.idOptCols || []).map(columnName).join(', '))}</td>
     <td>${esc(Object.entries(d.working_hours).map(([k, v]) => `${k} ${v[0]}–${v[1]}`).join(', '))}</td></tr>`).join('');
-  const rules = c.rules;
+  const rules = Object.values(c.rules).flatMap(v => Array.isArray(v) ? v : [v]);
+  const menu = c.knowledge_base.menu?.length ? `<div class="panel wide"><h3>Menu</h3><div class="grid-wrap"><table class="list">
+      <tr><th>Item</th><th>Category</th><th>Price</th><th>Description</th></tr>
+      ${c.knowledge_base.menu.map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.category || '')}</td><td>${esc(c.clinic.currency)} ${m.price}</td><td>${esc(m.description || '')}</td></tr>`).join('')}
+    </table></div></div>` : '';
+  const area = c.service_area ? `<div class="panel"><h3>Service area</h3><div>${esc(c.service_area.description)}</div>
+      <div class="muted">Postal code prefixes: ${esc(c.service_area.postal_prefixes.join(', '))}</div></div>` : '';
   return `
     <h2>AI assistant settings</h2>
     <p class="muted">Read-only view. The settings are edited in agent-config.json and schedule.json in the repository; a deploy script pushes them to Vapi.</p>
     <div class="settings">
-      <div class="panel"><h3>Clinic</h3>
+      <div class="panel"><h3>${esc(L('business'))}</h3>
         <div>${esc(c.clinic.name)}</div>
         <div class="muted">Language: ${esc(c.clinic.language)} · Time zone: ${esc(c.clinic.timezone)} · Admin ring timeout: ${c.clinic.admin_ring_timeout_sec} s</div>
       </div>
@@ -388,15 +415,12 @@ function viewSettings() {
       </div>
       <div class="panel wide"><h3>Services</h3><div class="grid-wrap"><table class="list">
         <tr><th>Name</th><th>Urgent</th><th>Price range</th><th>Duration</th><th>Speciality</th></tr>${services}</table></div></div>
-      <div class="panel wide"><h3>Doctors</h3><div class="grid-wrap"><table class="list">
-        <tr><th>Doctor</th><th>Speciality</th><th>Columns</th><th>Working hours</th></tr>${doctors}</table></div></div>
+      ${area}
+      <div class="panel wide"><h3>${esc(L('resources'))}</h3><div class="grid-wrap"><table class="list">
+        <tr><th>${esc(L('resource'))}</th><th>Speciality</th><th>Columns</th><th>Working hours</th></tr>${doctors}</table></div></div>
+      ${menu}
       <div class="panel"><h3>Knowledge base · FAQ</h3><dl class="faq">${faq}</dl></div>
-      <div class="panel"><h3>Rules</h3><ul class="plain">
-        <li>${esc(rules.no_medical_advice)}</li>
-        ${rules.slot_selection.map(r => `<li>${esc(r)}</li>`).join('')}
-        <li>${esc(rules.doctor_choice)}</li>
-        <li>${esc(rules.booking)}</li>
-      </ul></div>
+      <div class="panel"><h3>Rules</h3><ul class="plain">${rules.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>
     </div>`;
 }
 
@@ -427,14 +451,17 @@ const Live = {
     if (CFG.enableSoftphone) this.initSoftphone().catch(e => { console.error(e); toast('Softphone: ' + e.message); });
   },
 
+  biz: () => App.business?.id || 'dental',
+
   async loadInitial() {
     const sb = this.sb;
     const [calls, states, appts] = await Promise.all([
-      sb.from('calls').select('*').order('started_at', { ascending: false }).limit(50),
-      sb.from('call_state').select('*'),
-      sb.from('appointments').select('*').order('start'),
+      sb.from('calls').select('*').eq('business', this.biz()).order('started_at', { ascending: false }).limit(50),
+      sb.from('call_state').select('*, calls!inner(business)').eq('calls.business', this.biz()),
+      sb.from('appointments').select('*').eq('business', this.biz()).order('start'),
     ]);
     for (const r of [calls, states, appts]) if (r.error) throw new Error(r.error.message);
+    states.data.forEach(s => delete s.calls);
     calls.data.forEach(c => Store.upsertCall(c));
     states.data.forEach(s => Store.setState(s));
     appts.data.forEach(a => Store.upsertAppointment(a));
@@ -447,12 +474,15 @@ const Live = {
   },
 
   subscribe() {
-    const on = (table, event, fn) => ['postgres_changes', { event, schema: 'public', table }, p => p.new && fn(p.new)];
+    // calls and appointments are filtered by business; messages and states only for calls shown on this page.
+    const on = (table, event, fn, filter) => ['postgres_changes', { event, schema: 'public', table, ...(filter ? { filter } : {}) }, p => p.new && fn(p.new)];
+    const mine = fn => r => { if (App.calls.has(r.call_id)) fn(r); };
+    const biz = `business=eq.${this.biz()}`;
     this.channel = this.sb.channel('call-desk')
-      .on(...on('calls', '*', c => Store.upsertCall(c)))
-      .on(...on('call_messages', 'INSERT', m => Store.addMessage(m)))
-      .on(...on('call_state', '*', s => Store.setState(s)))
-      .on(...on('appointments', '*', a => Store.upsertAppointment(a)))
+      .on(...on('calls', '*', c => Store.upsertCall(c), biz))
+      .on(...on('call_messages', 'INSERT', mine(m => Store.addMessage(m))))
+      .on(...on('call_state', '*', mine(s => Store.setState(s))))
+      .on(...on('appointments', '*', a => Store.upsertAppointment(a), biz))
       .subscribe(status => setLiveStatus(status === 'SUBSCRIBED' ? 'Live' : status, status === 'SUBSCRIBED' ? 'ok' : 'warn'));
   },
 
@@ -570,7 +600,7 @@ const Live = {
   /* Fake page-to-page call from caller.html (see fakecall.js). */
   async onFake(ev, p) {
     const fake = (event, payload = {}) => FakeCall.send(this.fake, event, { call_id: p.call_id, ...payload });
-    if (ev === 'ring' && !this.fakeCall) {
+    if (ev === 'ring' && !this.fakeCall && (p.business || 'dental') === this.biz()) {
       this.fakeRing = p.call_id;
       App.incoming = {
         phone: p.phone,
@@ -633,12 +663,14 @@ async function switchMode(mode) {
     $('#modeSelect').value = App.mode;
     return;
   }
-  if (window.Replay) Replay.stop();
+  if (typeof Replay !== 'undefined') Replay.stop();
   await Live.stop();
   App.mode = mode;
   $('#modeSelect').value = mode;
   Store.reset();
-  if (mode === 'live') await Live.start();
+  if (mode === 'live') {
+    await Live.start();
+  }
   render();
 }
 
@@ -672,19 +704,42 @@ function bindEvents() {
   }, 1000);
 }
 
+// Business sets: businesses/index.json lists them; ?biz=<id> picks one (dental by default).
+async function loadBusiness() {
+  let list = [{ id: 'dental', label: 'Dental clinic', path: '.' }];
+  try { list = await fetch('businesses/index.json').then(r => r.json()); } catch (_) { /* dental only */ }
+  const want = new URLSearchParams(location.search).get('biz') || 'dental';
+  const biz = list.find(b => b.id === want) || list[0];
+  const get = f => fetch(`${biz.path}/${f}`).then(r => { if (!r.ok) throw new Error(f); return r.json(); });
+  const [config, schedule, replay] = await Promise.all([
+    get('agent-config.json'), get('schedule.json'), biz.replay ? get('replay.json') : null,
+  ]);
+  // The page code uses the dental key names; the other sets use generic ones.
+  config.clinic = config.clinic || config.business;
+  schedule.doctors = schedule.doctors || schedule.resources;
+  schedule.clinic_hours = schedule.clinic_hours || schedule.business_hours;
+  Object.assign(App, { business: biz, config, schedule, replay });
+
+  const sel = $('#bizSelect');
+  sel.innerHTML = list.map(b => `<option value="${esc(b.id)}" ${b.id === biz.id ? 'selected' : ''}>${esc(b.label)}</option>`).join('');
+  sel.addEventListener('change', () => {
+    const q = new URLSearchParams(location.search);
+    q.set('biz', sel.value);
+    location.search = q.toString();
+  });
+}
+
 async function init() {
   try {
-    const [config, schedule] = await Promise.all([
-      fetch('agent-config.json').then(r => r.json()),
-      fetch('schedule.json').then(r => r.json()),
-    ]);
-    App.config = config;
-    App.schedule = schedule;
+    await loadBusiness();
   } catch (e) {
     $('#view').innerHTML = `<div class="empty">Cannot load agent-config.json or schedule.json. Serve the folder over HTTP (GitHub Pages or a local web server).</div>`;
     return;
   }
   $('#clinicName').textContent = App.config.clinic.name;
+  $('#logo').textContent = L('logo');
+  $('#callerLink').href = `caller.html?biz=${encodeURIComponent(App.business.id)}`;
+  if (typeof Replay !== 'undefined') Replay.setupBar();
   document.title = `${App.config.clinic.name} · Call Desk`;
   bindEvents();
   await switchMode(CFG.defaultMode === 'live' && isLiveConfigured() ? 'live' : 'replay');

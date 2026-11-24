@@ -2,7 +2,7 @@
 // UC2 observer: the page sends each final utterance of the administrator's call.
 // Stores the message, asks the LLM for stage / script step / fields, updates the call state,
 // and books the slot automatically once all required fields are known.
-import { CORS, db, env, json, loadConfig, pinError } from "../_shared/common.ts";
+import { CORS, db, env, json, loadConfigForCall, pinError, resourceField } from "../_shared/common.ts";
 import { bookSlot, missingRequired, updateCallState } from "../_shared/tools.ts";
 import { nowInTz } from "../_shared/schedule.ts";
 
@@ -15,10 +15,11 @@ function systemPrompt(config: any, schedule: any): string {
     "Script steps (step / stage: text):", ...config.script.map((s: any) => `- ${s.step} / ${s.stage}: ${s.say || s.goal}`),
     "Appointment fields:", ...config.appointment_fields.map((f: any) => `- ${f.id}${f.required ? " (required)" : ""}: ${f.label}`),
     "Services (id: name):", ...config.services.map((s: any) => `- ${s.id}: ${s.name}`),
-    "Doctors (id: name, speciality):", ...schedule.doctors.map((d: any) => `- ${d.id}: ${d.name}, ${d.speciality_label}`),
+    `Resources for the "${resourceField(config)}" field (id: name, speciality):`,
+    ...schedule.doctors.map((d: any) => `- ${d.id}: ${d.name}, ${d.speciality_label}`),
     'Return only JSON: {"stage": "<stage id>", "script_step": "<step id>", "fields": {"<field id>": "<value>"}}.',
-    "Include only fields that were actually said in the conversation. service and doctor are ids;",
-    'datetime is "YYYY-MM-DDTHH:MM"; patient_type is "new" or "returning".',
+    `Include only fields that were actually said in the conversation. service and ${resourceField(config)} are ids;`,
+    'datetime is "YYYY-MM-DDTHH:MM".',
   ].join("\n");
 }
 
@@ -47,7 +48,7 @@ Deno.serve(async (req) => {
   try {
     await db.from("call_messages").insert({ call_id, speaker, text });
 
-    const { config, schedule } = await loadConfig();
+    const { config, schedule } = await loadConfigForCall(call_id);
     const [{ data: msgs }, { data: state }] = await Promise.all([
       db.from("call_messages").select("speaker,text").eq("call_id", call_id).neq("speaker", "system")
         .order("created_at", { ascending: false }).limit(40),
@@ -66,10 +67,9 @@ Deno.serve(async (req) => {
     // Auto-save: book the slot as soon as everything required is known.
     let booking = null;
     const { data: appt } = await db.from("appointments").select("status").eq("call_id", call_id).neq("status", "cancelled").limit(1);
-    if (!missingRequired(fields).length && appt?.[0]?.status === "draft") {
+    if (!missingRequired(config, fields).length && appt?.[0]?.status === "draft") {
       booking = await bookSlot({
-        service_id: fields.service, doctor_id: fields.doctor || undefined, start: fields.datetime, name: fields.name,
-        phone: fields.phone, patient_type: fields.patient_type, complaint: fields.complaint, insurance_number: fields.insurance_number,
+        ...fields, service_id: fields.service, doctor_id: fields[resourceField(config)] || undefined, start: fields.datetime,
       }, call_id).catch((e) => ({ error: (e as Error).message }));
     }
     return json({ ok: true, stage, script_step, fields, booking });

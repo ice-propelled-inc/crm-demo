@@ -1,0 +1,253 @@
+{
+  "version": 1,
+  "labels": {
+    "business": "Business",
+    "resource": "Technician",
+    "resources": "Technicians",
+    "customer": "Customer",
+    "booking": "Job",
+    "bookings": "Jobs",
+    "admin": "Dispatcher",
+    "logo": "KP",
+    "resource_field": "technician",
+    "closed": "No scheduled jobs on this day. Emergency lockouts are served 24/7."
+  },
+  "business": {
+    "name": "KeyPoint Locksmiths",
+    "type": "field_service",
+    "language": "en",
+    "timezone": "America/Toronto",
+    "currency": "CAD",
+    "admin_ring_timeout_sec": 5,
+    "address": "1180 Dundas Street West, Toronto, Ontario M6J 1X4",
+    "emergency_line": "24/7"
+  },
+
+  "knowledge_base": {
+    "faq": [
+      { "q": "What are your hours?", "a": "Scheduled jobs every day 8 am to 8 pm. Emergency lockouts 24/7." },
+      { "q": "Which areas do you serve?", "a": "Toronto postal codes starting with M4, M5, M6 and M8: downtown, midtown, the East End, the West End and Etobicoke south." },
+      { "q": "How much does it cost?", "a": "The call-out fee is 59 dollars from 8 am to 8 pm and 99 dollars at night. It is credited toward the job. We give a price range on the phone; the technician confirms the final price before starting." },
+      { "q": "How fast can you come for a lockout?", "a": "Usually within 30 to 60 minutes in our service area." },
+      { "q": "What do I need to show?", "a": "Photo ID with the address of the home, or the vehicle registration in your name. Without proof of ownership or residence we cannot open the lock." },
+      { "q": "Can you make a car key without the original?", "a": "Yes, for most makes. We need the vehicle registration, your ID and the VIN." },
+      { "q": "Do you install smart locks?", "a": "Yes: August, Schlage Encode, Yale Assure and Level. You can buy the lock or we can supply it." },
+      { "q": "How can I pay?", "a": "Card, debit or cash after the job." },
+      { "q": "Is the work guaranteed?", "a": "Yes, 90 days on labour. Locks and keys carry the manufacturer's warranty." }
+    ],
+    "files": []
+  },
+
+  "service_area": {
+    "description": "Toronto: downtown, midtown, the East End, the West End and Etobicoke south.",
+    "postal_prefixes": ["M4", "M5", "M6", "M8"]
+  },
+
+  "services": [
+    { "id": "home_lockout", "name": "Home lockout", "urgent": true, "price_min": 119, "price_max": 199, "price_note": "Call-out included; night rate higher", "duration_min": 45, "speciality": "residential" },
+    { "id": "car_lockout", "name": "Car lockout", "urgent": true, "price_min": 99, "price_max": 179, "price_note": "Call-out included; night rate higher", "duration_min": 45, "speciality": "automotive" },
+    { "id": "rekey", "name": "Rekey locks", "urgent": false, "price_min": 89, "price_max": 180, "price_note": "Up to 3 locks", "duration_min": 60, "speciality": "residential" },
+    { "id": "lock_change", "name": "Lock replacement", "urgent": false, "price_min": 120, "price_max": 350, "duration_min": 60, "speciality": "residential" },
+    { "id": "smart_lock", "name": "Smart lock installation", "urgent": false, "price_min": 150, "price_max": 300, "price_note": "Labour; lock not included", "duration_min": 90, "speciality": "residential" },
+    { "id": "car_key", "name": "Car key or fob replacement", "urgent": false, "price_min": 180, "price_max": 450, "duration_min": 60, "speciality": "automotive" },
+    { "id": "commercial_repair", "name": "Commercial lock repair", "urgent": false, "price_min": 150, "price_max": 500, "duration_min": 90, "speciality": "commercial" },
+    { "id": "safe_opening", "name": "Safe opening", "urgent": false, "price_min": 200, "price_max": 600, "duration_min": 120, "speciality": "commercial" }
+  ],
+
+  "appointment_fields": [
+    { "id": "name", "label": "Customer name", "required": true },
+    { "id": "phone", "label": "Phone", "required": true, "note": "Auto-detected from caller ID; the caller confirms it" },
+    { "id": "address", "label": "Address and postal code", "required": true, "note": "Where the technician goes; must be inside the service area" },
+    { "id": "service", "label": "Service", "required": true },
+    { "id": "problem", "label": "Problem description", "required": true },
+    { "id": "vehicle", "label": "Vehicle (make, model, year)", "required": false, "note": "Required for car services" },
+    { "id": "id_check", "label": "Proof of ownership", "required": true, "note": "Caller agrees to show photo ID with the address or the vehicle registration" },
+    { "id": "datetime", "label": "Arrival time", "required": true },
+    { "id": "technician", "label": "Technician", "required": false, "note": "If the caller has no preference, assigned automatically" }
+  ],
+
+  "appointment_statuses": [
+    { "id": "draft", "label": "Draft", "meaning": "Data is still being collected, or the call ended before booking" },
+    { "id": "filled", "label": "Scheduled", "meaning": "All required fields are filled and the job is booked" },
+    { "id": "completed", "label": "Done", "meaning": "The job is done; set by the dispatcher" },
+    { "id": "cancelled", "label": "Cancelled", "meaning": "The job was cancelled" },
+    { "id": "missed", "label": "No-show", "meaning": "The customer was not there or could not prove ownership; set by the dispatcher" }
+  ],
+
+  "funnel_stages": [
+    { "id": "greeting", "label": "Greeting" },
+    { "id": "intent", "label": "Intent" },
+    { "id": "problem", "label": "Problem" },
+    { "id": "service_area", "label": "Address check" },
+    { "id": "customer_details", "label": "Customer and ownership" },
+    { "id": "slot_selection", "label": "Arrival time" },
+    { "id": "confirmation", "label": "Confirmation" },
+    { "id": "closing", "label": "Closing" },
+    { "id": "handoff", "label": "Handoff to dispatcher" }
+  ],
+
+  "script": [
+    { "step": "greet", "stage": "greeting", "say": "Hello, thank you for calling KeyPoint Locksmiths. How can I help you today?" },
+    { "step": "ask_intent", "stage": "intent", "goal": "Find out if the caller is locked out right now, needs a scheduled job, wants to change or cancel a job, or has a question" },
+
+    { "step": "ask_problem", "stage": "problem", "collects": ["problem"], "say": "What do you need help with, and is it a home, a car or a business?" },
+    { "step": "ask_vehicle", "stage": "problem", "collects": ["vehicle"], "say": "What is the make, model and year of the car?" },
+    { "step": "match_service", "stage": "problem", "collects": ["service"], "goal": "Match the problem to a service; tell the call-out fee and the price range, and that the final price is confirmed on site" },
+
+    { "step": "ask_address", "stage": "service_area", "collects": ["address"], "say": "What is the address, including the postal code?" },
+
+    { "step": "ask_name", "stage": "customer_details", "collects": ["name"], "say": "May I have your name, please?" },
+    { "step": "confirm_phone", "stage": "customer_details", "collects": ["phone"], "say": "Is {caller_phone} the best number to reach you?" },
+    { "step": "ownership", "stage": "customer_details", "collects": ["id_check"], "say": "The technician will need to see a photo ID with this address, or the vehicle registration in your name. Will you have that?" },
+    { "step": "ask_technician", "stage": "customer_details", "collects": ["technician"], "say": "Do you have a preferred technician, or is anyone available fine?" },
+
+    { "step": "ask_day", "stage": "slot_selection", "say": "Would you like the earliest available time, or do you have a preferred day?" },
+    { "step": "propose_time", "stage": "slot_selection", "collects": ["datetime"], "goal": "Propose an arrival time; if it does not fit, offer three alternatives per rules.slot_selection" },
+
+    { "step": "confirm", "stage": "confirmation", "goal": "Repeat the service, address, arrival time, technician, name, the call-out fee and the ID requirement; book the job" },
+    { "step": "close", "stage": "closing", "say": "You're all set. The technician will call when on the way. Is there anything else I can help with?" }
+  ],
+
+  "rules": {
+    "ownership": "Never book or dispatch a lockout, rekey, lock change or car key job unless the caller agrees to show photo ID with the address or the vehicle registration in their name.",
+    "no_bypass_advice": "Never explain how to open, pick or bypass a lock, and never give lock codes or key information to anyone.",
+    "safety": "If a child, a vulnerable person or a pet is locked inside a car or a home, or anyone is in danger, tell the caller to call 911 first, then hand over to the dispatcher.",
+    "no_fixed_price": "Give the call-out fee (59 dollars by day, 99 at night) and the price range. The technician confirms the final price before starting.",
+    "service_area": "Check the postal code: only codes starting with M4, M5, M6 or M8. Outside the area, apologise and do not book.",
+    "technician_choice": "Residential jobs go to Alex, car jobs to Priya, commercial locks and safes to Tom. Without a preference, use any technician with the right speciality.",
+    "travel_buffer": "Technicians need 30 minutes of travel between jobs; get_free_slots already accounts for it.",
+    "slot_selection": [
+      "Ask whether the caller wants the earliest time or a preferred day.",
+      "Propose an arrival time on that day.",
+      "If the time does not fit, propose three alternatives: the same day at another time; the same time on another day; the nearest free time within the next one or two days."
+    ],
+    "booking": "Book the job yourself once all required fields are collected. Do not send an SMS confirmation.",
+    "state_updates": "Call update_call_state after every script step."
+  },
+
+  "handoff": {
+    "triggers": [
+      { "id": "lockout_now", "description": "The caller is locked out of a home or a car right now (24/7)" },
+      { "id": "ownership_issue", "description": "Eviction, a dispute about who owns the property or vehicle, or no proof of ownership" },
+      { "id": "out_of_knowledge_base", "description": "The question is not covered by the knowledge base or the services list" },
+      { "id": "human_requested", "description": "The caller asks to speak to a person" }
+    ],
+    "handoff_steps": [
+      "If anyone is in danger or a child or pet is locked in, tell the caller to call 911 first.",
+      "Ask the caller's name and the exact address or location of the car.",
+      "Confirm the auto-detected phone number; if not confirmed in one try, ask for the number once.",
+      "Remind the caller that ID or registration will be checked on site.",
+      "Transfer the call even if some details are missing."
+    ],
+    "say_before_transfer": "I'm connecting you with our dispatcher now, so they can send a technician right away. Please stay on the line.",
+    "admin_no_answer": {
+      "say": "I'm sorry, our dispatcher can't pick up right now. I've saved your details, and they will call you back within 10 minutes.",
+      "save_status": "draft"
+    }
+  },
+
+  "speech_to_text": {
+    "provider": "deepgram",
+    "model": "nova-3",
+    "language": "en",
+    "keyterms": [
+      "KeyPoint", "Alex", "Priya", "Tom",
+      "lockout", "rekey", "deadbolt", "key fob", "smart lock", "Schlage", "Yale", "August", "VIN", "registration", "safe"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "get_free_slots",
+      "description": "Return free arrival times for a service (including the 30-minute travel buffer), optionally for one technician. With date only: times on that date. With time: that time on that date or later dates. Without both: the nearest times.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "service_id": { "type": "string" },
+          "technician_id": { "type": "string", "enum": ["tech_alex", "tech_priya", "tech_tom"] },
+          "date": { "type": "string", "format": "date" },
+          "time": { "type": "string", "description": "HH:MM" },
+          "limit": { "type": "integer", "default": 5 }
+        },
+        "required": ["service_id"]
+      }
+    },
+    {
+      "name": "book_slot",
+      "description": "Book a job with status Scheduled. Only after the caller agreed to the ID check.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "service_id": { "type": "string" },
+          "technician_id": { "type": "string" },
+          "start": { "type": "string", "format": "date-time" },
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "address": { "type": "string" },
+          "problem": { "type": "string" },
+          "vehicle": { "type": "string" },
+          "id_check": { "type": "string", "description": "What the customer will show, e.g. driver's licence with this address" }
+        },
+        "required": ["service_id", "start", "name", "phone", "address", "problem", "id_check"]
+      }
+    },
+    {
+      "name": "find_appointments",
+      "description": "Find scheduled jobs by phone, optionally narrowed by name and date.",
+      "parameters": {
+        "type": "object",
+        "properties": { "phone": { "type": "string" }, "name": { "type": "string" }, "date": { "type": "string", "format": "date" } },
+        "required": ["phone"]
+      }
+    },
+    {
+      "name": "reschedule",
+      "description": "Move a job to a new free arrival time.",
+      "parameters": {
+        "type": "object",
+        "properties": { "appointment_id": { "type": "string" }, "start": { "type": "string", "format": "date-time" }, "technician_id": { "type": "string" } },
+        "required": ["appointment_id", "start"]
+      }
+    },
+    {
+      "name": "cancel",
+      "description": "Cancel a job.",
+      "parameters": { "type": "object", "properties": { "appointment_id": { "type": "string" } }, "required": ["appointment_id"] }
+    },
+    {
+      "name": "update_call_state",
+      "description": "Report the current funnel stage, script step and collected fields. Call after every script step.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "stage": { "type": "string", "enum": ["greeting", "intent", "problem", "service_area", "customer_details", "slot_selection", "confirmation", "closing", "handoff"] },
+          "script_step": { "type": "string" },
+          "fields": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" }, "phone": { "type": "string" }, "address": { "type": "string" },
+              "service": { "type": "string" }, "problem": { "type": "string" }, "vehicle": { "type": "string" },
+              "id_check": { "type": "string" }, "datetime": { "type": "string" }, "technician": { "type": "string" }
+            }
+          },
+          "handoff_reason": { "type": "string", "enum": ["lockout_now", "ownership_issue", "out_of_knowledge_base", "human_requested"] }
+        },
+        "required": ["stage", "script_step"]
+      }
+    },
+    {
+      "name": "transfer_to_admin",
+      "description": "Transfer the call live to the dispatcher (24/7 for lockouts). Maps to Vapi transferCall.",
+      "parameters": {
+        "type": "object",
+        "properties": { "reason": { "type": "string", "enum": ["lockout_now", "ownership_issue", "out_of_knowledge_base", "human_requested"] } },
+        "required": ["reason"]
+      }
+    }
+  ],
+
+  "prompts": {
+    "agent": "You are the phone assistant of KeyPoint Locksmiths in Toronto. The team: a dispatcher who answers the phone, and three technicians: Alex Romero (homes), Priya Shah (cars, keys and fobs) and Tom Becker (commercial locks and safes). You answer when the dispatcher is busy. Speak English only. Be calm, warm and brief: one question at a time, short sentences, no lists or markdown. Current date and time: {{now}}. Caller ID: {{customer.number}}.\n\nLockouts right now (home or car) are handled 24/7 by the dispatcher: if a child, a vulnerable person or a pet is locked in, or anyone is in danger, tell the caller to call 911 first. Ask the name and the exact address or car location, confirm the phone number, remind that ID or registration will be checked on site, then call update_call_state with stage handoff and reason lockout_now, say the handoff phrase and call transferCall.\n\nBooking flow for other jobs: ask what they need and whether it is a home, a car or a business; for a car ask the make, model and year. Match the problem to a service; tell the call-out fee (59 dollars by day, 99 at night, credited toward the job) and the price range, and say the technician confirms the final price before starting. Ask the address with the postal code and check the service area (postal codes starting with M4, M5, M6 or M8; outside it, apologise and do not book). Ask the name, confirm the phone number, and get agreement to show photo ID with the address or the vehicle registration; without it do not book. Ask for a preferred technician, otherwise use the right speciality. Get free times with get_free_slots (it includes the 30-minute travel buffer), ask for the earliest or a preferred day, propose an arrival time, and if it does not fit offer three alternatives: same day another time, same time another day, nearest free time within one or two days. Repeat everything and book with book_slot. Call update_call_state after every step.\n\nNever explain how to open, pick or bypass a lock. Never promise a fixed price. Hand over to the dispatcher for ownership disputes or evictions (ownership_issue), questions outside the knowledge base (out_of_knowledge_base), or when the caller asks for a person (human_requested).",
+    "observer": "You observe a phone call between the locksmith dispatcher and a caller. Do not talk. Read the transcript and return JSON with the current stage, script_step and the collected fields (name, phone, address, service, problem, vehicle, proof of ownership, arrival time, technician), using the same stages, script and fields as the agent."
+  }
+}

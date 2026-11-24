@@ -1,11 +1,12 @@
 // deno-lint-ignore-file no-explicit-any
 // Vapi Server URL: live transcript, call status, tool calls and the end-of-call report.
-// Configure the assistant's server URL to <functions>/vapi-webhook with the header x-vapi-secret = VAPI_SECRET.
-import { db, digits, env, json, systemMessage } from "../_shared/common.ts";
+// Configure the assistant's server URL to <functions>/vapi-webhook?biz=<business set> with the header
+// x-vapi-secret = VAPI_SECRET (scripts/deploy_vapi_assistant.py does this).
+import { db, digits, env, json, normBiz, systemMessage } from "../_shared/common.ts";
 import { runTool } from "../_shared/tools.ts";
 
 // Find the call row created by twilio-voice (matched by caller number) or fake-call (by metadata), or create one.
-async function ensureCall(vc: any): Promise<string> {
+async function ensureCall(vc: any, business: string): Promise<string> {
   const vid = vc?.id;
   if (!vid) throw new Error("Vapi message without call id");
   const byVapi = await db.from("calls").select("id").eq("vapi_call_id", vid).limit(1);
@@ -28,7 +29,7 @@ async function ensureCall(vc: any): Promise<string> {
     await db.from("calls").update({ vapi_call_id: vid, status: "active", mode: "ai" }).eq("id", match.id);
     return match.id;
   }
-  const ins = await db.from("calls").insert({ phone, vapi_call_id: vid, status: "active", mode: "ai" }).select("id").single();
+  const ins = await db.from("calls").insert({ phone, business, vapi_call_id: vid, status: "active", mode: "ai" }).select("id").single();
   if (ins.error) {
     // Another event of the same call created the row first.
     const again = await db.from("calls").select("id").eq("vapi_call_id", vid).single();
@@ -38,8 +39,8 @@ async function ensureCall(vc: any): Promise<string> {
   return ins.data.id;
 }
 
-async function handleToolCalls(msg: any) {
-  const callId = await ensureCall(msg.call);
+async function handleToolCalls(msg: any, business: string) {
+  const callId = await ensureCall(msg.call, business);
   const list = msg.toolCallList ?? msg.toolCalls ?? [];
   const results = [];
   for (const tc of list) {
@@ -73,15 +74,16 @@ Deno.serve(async (req) => {
   if (req.headers.get("x-vapi-secret") !== env("VAPI_SECRET")) return new Response("Unauthorized", { status: 401 });
   const body = await req.json();
   const msg = body.message ?? body;
+  const business = normBiz(new URL(req.url).searchParams.get("biz"));
 
   try {
     switch (msg.type) {
       case "tool-calls":
-        return json(await handleToolCalls(msg));
+        return json(await handleToolCalls(msg, business));
 
       case "transcript":
         if (msg.transcriptType === "final" && msg.transcript) {
-          const callId = await ensureCall(msg.call);
+          const callId = await ensureCall(msg.call, business);
           await db.from("call_messages").insert({
             call_id: callId, speaker: msg.role === "assistant" ? "ai" : "caller", text: msg.transcript,
           });
@@ -89,7 +91,7 @@ Deno.serve(async (req) => {
         break;
 
       case "status-update": {
-        const callId = await ensureCall(msg.call);
+        const callId = await ensureCall(msg.call, business);
         if (msg.status === "forwarding") {
           await db.from("calls").update({ mode: "transferring" }).eq("id", callId);
           await systemMessage(callId, "Transferring the call to the administrator");
@@ -102,7 +104,7 @@ Deno.serve(async (req) => {
       }
 
       case "end-of-call-report": {
-        const callId = await ensureCall(msg.call);
+        const callId = await ensureCall(msg.call, business);
         const url = msg.recordingUrl ?? msg.artifact?.recordingUrl ?? msg.artifact?.recording?.mono?.combinedUrl;
         if (url) await db.from("calls").update({ recording_url: url }).eq("id", callId);
         break;

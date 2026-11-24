@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "timezone": "America/Toronto",
+  "slot_step_min": 30,
+  "booking_horizon_days": 14,
+  "travel_buffer_min": 30,
+  "emergency_hours": "24/7",
+  "business_hours": {
+    "mon": ["08:00", "20:00"],
+    "tue": ["08:00", "20:00"],
+    "wed": ["08:00", "20:00"],
+    "thu": ["08:00", "20:00"],
+    "fri": ["08:00", "20:00"],
+    "sat": ["08:00", "20:00"],
+    "sun": ["08:00", "20:00"]
+  },
+  "columns": [
+    { "idOptCol": 1, "name": "Van 1" },
+    { "idOptCol": 2, "name": "Van 2 (auto)" },
+    { "idOptCol": 3, "name": "Van 3 (commercial)" }
+  ],
+  "resources": [
+    {
+      "id": "tech_alex",
+      "name": "Alex Romero",
+      "speciality": "residential",
+      "speciality_label": "Homes: lockouts, rekey, smart locks",
+      "idOptCols": [1],
+      "working_hours": {
+        "mon": ["08:00", "17:00"], "tue": ["08:00", "17:00"], "wed": ["08:00", "17:00"],
+        "thu": ["08:00", "17:00"], "fri": ["08:00", "17:00"], "sat": ["10:00", "16:00"]
+      },
+      "busy": [
+        { "days": ["mon", "tue", "wed", "thu", "fri"], "from": "12:00", "to": "12:30", "label": "Lunch" },
+        { "days": ["mon", "thu"], "from": "08:00", "to": "10:00", "label": "Booked job" },
+        { "days": ["wed"], "from": "13:00", "to": "15:00", "label": "Booked job" },
+        { "days": ["sat"], "from": "10:00", "to": "11:30", "label": "Booked job" }
+      ]
+    },
+    {
+      "id": "tech_priya",
+      "name": "Priya Shah",
+      "speciality": "automotive",
+      "speciality_label": "Cars: lockouts, keys and fobs",
+      "idOptCols": [2],
+      "working_hours": {
+        "tue": ["11:00", "20:00"], "wed": ["11:00", "20:00"], "thu": ["11:00", "20:00"],
+        "fri": ["11:00", "20:00"], "sat": ["11:00", "20:00"], "sun": ["11:00", "20:00"]
+      },
+      "busy": [
+        { "days": ["tue", "wed", "thu", "fri", "sat", "sun"], "from": "15:00", "to": "15:30", "label": "Break" },
+        { "days": ["tue", "fri"], "from": "11:00", "to": "13:00", "label": "Booked job" },
+        { "days": ["sat"], "from": "16:00", "to": "18:00", "label": "Booked job" }
+      ]
+    },
+    {
+      "id": "tech_tom",
+      "name": "Tom Becker",
+      "speciality": "commercial",
+      "speciality_label": "Commercial locks and safes",
+      "idOptCols": [3],
+      "working_hours": {
+        "mon": ["08:00", "16:00"], "tue": ["08:00", "16:00"], "wed": ["08:00", "16:00"],
+        "thu": ["08:00", "16:00"], "fri": ["08:00", "16:00"]
+      },
+      "busy": [
+        { "days": ["mon", "tue", "wed", "thu", "fri"], "from": "12:00", "to": "12:30", "label": "Lunch" },
+        { "days": ["tue", "thu"], "from": "09:00", "to": "11:30", "label": "Booked job" },
+        { "days": ["fri"], "from": "13:00", "to": "16:00", "label": "Booked job" }
+      ]
+    }
+  ]
+}

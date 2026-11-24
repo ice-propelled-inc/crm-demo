@@ -1,15 +1,19 @@
 // deno-lint-ignore-file no-explicit-any
 // Agent tools (agent-config.json "tools") and the call-state / appointment logic shared with the UC2 observer.
-import { db, digits, loadConfig } from "./common.ts";
+// Every call belongs to a business set (calls.business); config, schedule and bookings are taken for that set.
+import { callBusiness, db, digits, loadConfig, resourceField } from "./common.ts";
 import {
   addDays, candidateDoctors, findService, findSlots, fmtMin, isFree, label, loadBookings, normStart, nowInTz, toMin,
 } from "./schedule.ts";
 
-const REQUIRED = ["name", "phone", "service", "datetime", "patient_type", "complaint"];
+// Appointment columns filled from fields of the same name; other fields go to appointments.details.
+const COLUMNS = ["name", "phone", "complaint", "insurance_number"];
+// Tool arguments that are not appointment fields.
+const NOT_FIELDS = ["service_id", "start", "doctor_id", "technician_id", "resource_id", "appointment_id", "limit", "date", "time"];
 
-async function context() {
-  const { config, schedule } = await loadConfig();
-  return { config, schedule, now: nowInTz(config.clinic.timezone) };
+async function context(business: string) {
+  const { config, schedule } = await loadConfig(business);
+  return { business, config, schedule, now: nowInTz(config.clinic.timezone) };
 }
 
 async function appointmentForCall(callId: string) {
@@ -19,30 +23,41 @@ async function appointmentForCall(callId: string) {
   return data?.[0] ?? null;
 }
 
-// Call-state fields -> appointment columns.
+// Fields (call state or tool arguments) -> appointment columns and details.
 function toAppointment(config: any, schedule: any, f: Record<string, any>) {
   const row: Record<string, any> = {};
-  const svc = findService(config, f.service);
+  const details: Record<string, any> = {};
+  const resField = resourceField(config);
+  const svc = findService(config, f.service ?? f.service_id);
   if (svc) row.service_id = svc.id;
-  const doc = schedule.doctors.find((d: any) => d.id === f.doctor || d.name === f.doctor);
+  const res = f[resField] ?? f.doctor_id ?? f.technician_id ?? f.resource_id;
+  const doc = schedule.doctors.find((d: any) => d.id === res || d.name === res);
   if (doc) row.doctor_id = doc.id;
-  for (const k of ["name", "phone", "complaint", "insurance_number"]) if (f[k]) row[k] = String(f[k]);
-  if (f.patient_type === "new" || f.patient_type === "returning") row.patient_type = f.patient_type;
+  for (const [k, v] of Object.entries(f)) {
+    if (v === null || v === undefined || v === "") continue;
+    if (COLUMNS.includes(k)) row[k] = String(v);
+    else if (k === "patient_type") { if (v === "new" || v === "returning") row.patient_type = v; }
+    else if (!["service", "datetime", resField, ...NOT_FIELDS].includes(k)) details[k] = v;
+  }
+  if (Object.keys(details).length) row.details = details;
   return row;
 }
 
 // Keep a Draft appointment in sync with the collected fields while the call goes on.
 async function syncDraft(callId: string, fields: Record<string, any>) {
-  const { config, schedule } = await loadConfig();
+  const business = await callBusiness(callId);
+  const { config, schedule } = await loadConfig(business);
   const row = toAppointment(config, schedule, fields);
   const appt = await appointmentForCall(callId);
   if (!appt) {
     if (!row.service_id) return null;
-    const { data, error } = await db.from("appointments").insert({ ...row, call_id: callId, status: "draft" }).select().single();
+    const { data, error } = await db.from("appointments")
+      .insert({ ...row, business, call_id: callId, status: "draft" }).select().single();
     if (error) throw new Error(error.message);
     return data;
   }
   if (appt.status !== "draft") return appt;
+  if (row.details) row.details = { ...(appt.details || {}), ...row.details };
   const { data, error } = await db.from("appointments").update(row).eq("id", appt.id).select().single();
   if (error) throw new Error(error.message);
   return data;
@@ -63,36 +78,47 @@ export async function updateCallState(callId: string, args: any) {
   return fields;
 }
 
-export const missingRequired = (fields: Record<string, any>) => REQUIRED.filter((k) => !fields[k]);
+// Required fields of the business set (agent-config.json appointment_fields).
+export const missingRequired = (config: any, fields: Record<string, any>) =>
+  config.appointment_fields.filter((f: any) => f.required && !fields[f.id]).map((f: any) => f.id as string);
+
+const resourceArg = (args: any) => args.doctor_id ?? args.technician_id ?? args.resource_id ?? undefined;
 
 export async function bookSlot(args: any, callId: string | null) {
-  const { config, schedule, now } = await context();
+  const { business, config, schedule, now } = await context(await callBusiness(callId));
   const svc = findService(config, args.service_id);
   if (!svc) return { error: `Unknown service_id "${args.service_id}"` };
   const start = normStart(args.start);
   const date = start.slice(0, 10);
   const m = toMin(start.slice(11, 16));
   const existing = callId ? await appointmentForCall(callId) : null;
-  const bookings = await loadBookings(date, date);
-  const doc = candidateDoctors(schedule, svc.speciality, args.doctor_id)
-    .find((d: any) => isFree(d, date, m, svc.duration_min, bookings, now, existing?.id));
+  const bookings = await loadBookings(date, date, business);
+  const buf = schedule.travel_buffer_min || 0;
+  const doc = candidateDoctors(schedule, svc.speciality, resourceArg(args), args.party_size)
+    .find((d: any) => isFree(d, date, m, svc.duration_min, bookings, now, existing?.id, buf));
   if (!doc) {
-    const nearest = findSlots(schedule, config, { service_id: svc.id, doctor_id: args.doctor_id, date, limit: 3 },
-      await loadBookings(date, addDays(date, schedule.booking_horizon_days)), now);
+    const nearest = findSlots(schedule, config,
+      { service_id: svc.id, doctor_id: resourceArg(args), party_size: args.party_size, date, limit: 3 },
+      await loadBookings(date, addDays(date, schedule.booking_horizon_days), business), now);
     return { error: "This slot is not free", nearest };
   }
+  const fields = toAppointment(config, schedule, args);
   const row: Record<string, any> = {
-    call_id: callId, service_id: svc.id, doctor_id: doc.id, status: "filled",
+    ...fields, business, call_id: callId, service_id: svc.id, doctor_id: doc.id, status: "filled",
     start: `${start}:00`, end: `${date}T${fmtMin(m + svc.duration_min)}:00`,
   };
-  for (const k of ["name", "phone", "patient_type", "complaint", "insurance_number"]) if (args[k]) row[k] = args[k];
+  if (existing && fields.details) row.details = { ...(existing.details || {}), ...fields.details };
   const q = existing
     ? db.from("appointments").update(row).eq("id", existing.id)
     : db.from("appointments").insert(row);
   const { data, error } = await q.select().single();
   if (error) throw new Error(error.message);
-  if (callId) await db.from("call_state").update({ fields: { ...(await stateFields(callId)), datetime: start, doctor: doc.id } }).eq("call_id", callId);
-  return { appointment_id: data.id, doctor: doc.name, when: label(start), status: "Filled" };
+  if (callId) {
+    await db.from("call_state")
+      .update({ fields: { ...(await stateFields(callId)), datetime: start, [resourceField(config)]: doc.id } })
+      .eq("call_id", callId);
+  }
+  return { appointment_id: data.id, assigned_to: doc.name, when: label(start), status: "Filled" };
 }
 
 async function stateFields(callId: string) {
@@ -101,18 +127,19 @@ async function stateFields(callId: string) {
 }
 
 export async function runTool(name: string, args: any, callId: string) {
-  const { config, schedule, now } = await context();
+  const { business, config, schedule, now } = await context(await callBusiness(callId));
   switch (name) {
     case "get_free_slots": {
       const from = args.date && args.date >= now.date ? args.date : now.date;
-      const bookings = await loadBookings(from, addDays(from, schedule.booking_horizon_days));
-      return { slots: findSlots(schedule, config, args, bookings, now) };
+      const bookings = await loadBookings(from, addDays(from, schedule.booking_horizon_days), business);
+      return { slots: findSlots(schedule, config, { ...args, doctor_id: resourceArg(args) }, bookings, now) };
     }
     case "book_slot":
       return bookSlot(args, callId);
     case "find_appointments": {
       const phone = digits(args.phone);
-      let q = db.from("appointments").select("*").in("status", ["draft", "filled"]).gte("start", `${now.date}T00:00:00`);
+      let q = db.from("appointments").select("*").eq("business", business)
+        .in("status", ["draft", "filled"]).gte("start", `${now.date}T00:00:00`);
       if (args.date) q = q.gte("start", `${args.date}T00:00:00`).lte("start", `${args.date}T23:59:59`);
       const { data, error } = await q.order("start");
       if (error) throw new Error(error.message);
@@ -122,8 +149,8 @@ export async function runTool(name: string, args: any, callId: string) {
       return {
         appointments: found.map((a: any) => ({
           appointment_id: a.id, name: a.name, service: findService(config, a.service_id)?.name,
-          doctor: schedule.doctors.find((d: any) => d.id === a.doctor_id)?.name ?? null,
-          when: a.start ? label(a.start.slice(0, 16)) : null, status: a.status,
+          assigned_to: schedule.doctors.find((d: any) => d.id === a.doctor_id)?.name ?? null,
+          when: a.start ? label(a.start.slice(0, 16)) : null, status: a.status, details: a.details,
         })),
       };
     }
@@ -134,16 +161,16 @@ export async function runTool(name: string, args: any, callId: string) {
       const start = normStart(args.start);
       const date = start.slice(0, 10);
       const m = toMin(start.slice(11, 16));
-      const bookings = await loadBookings(date, date);
-      const doc = candidateDoctors(schedule, svc.speciality, args.doctor_id ?? appt.doctor_id ?? undefined)
-        .find((d: any) => isFree(d, date, m, svc.duration_min, bookings, now, appt.id));
+      const bookings = await loadBookings(date, date, business);
+      const doc = candidateDoctors(schedule, svc.speciality, resourceArg(args) ?? appt.doctor_id ?? undefined, appt.details?.party_size)
+        .find((d: any) => isFree(d, date, m, svc.duration_min, bookings, now, appt.id, schedule.travel_buffer_min || 0));
       if (!doc) return { error: "This slot is not free" };
       const { error } = await db.from("appointments").update({
         doctor_id: doc.id, status: "filled", start: `${start}:00`, end: `${date}T${fmtMin(m + svc.duration_min)}:00`,
       }).eq("id", appt.id);
       if (error) throw new Error(error.message);
       await db.from("calls").update({ outcome: "rescheduled" }).eq("id", callId);
-      return { appointment_id: appt.id, doctor: doc.name, when: label(start) };
+      return { appointment_id: appt.id, assigned_to: doc.name, when: label(start) };
     }
     case "cancel": {
       const { data, error } = await db.from("appointments").update({ status: "cancelled" })
@@ -155,7 +182,7 @@ export async function runTool(name: string, args: any, callId: string) {
     }
     case "update_call_state": {
       const fields = await updateCallState(callId, args);
-      return { ok: true, missing_required: missingRequired(fields) };
+      return { ok: true, missing_required: missingRequired(config, fields) };
     }
     default:
       return { error: `Unknown tool "${name}"` };
@@ -166,8 +193,9 @@ export async function runTool(name: string, args: any, callId: string) {
 export async function ensureDraft(callId: string) {
   const appt = await appointmentForCall(callId);
   if (appt) return;
-  const { data: call } = await db.from("calls").select("phone").eq("id", callId).maybeSingle();
-  const { config, schedule } = await loadConfig();
+  const { data: call } = await db.from("calls").select("phone,business").eq("id", callId).maybeSingle();
+  const { config, schedule } = await loadConfig(call?.business);
   const row = toAppointment(config, schedule, await stateFields(callId));
-  await db.from("appointments").insert({ phone: call?.phone, ...row, call_id: callId, status: "draft" });
+  await db.from("appointments")
+    .insert({ phone: call?.phone, ...row, business: call?.business || "dental", call_id: callId, status: "draft" });
 }

@@ -32,7 +32,9 @@ window.DEMO_CONFIG = {
   // Fake page-to-page call (caller.html): WebRTC audio, signalling over Supabase Realtime Broadcast.
   enableFakeCall: true,
   vapiPublicKey: "c601f582-4e6a-41b5-ad8c-4d7375060ced",       // Vapi public key (safe for the browser) for the AI part of the fake call
-  vapiAssistantId: "9a13fdac-9734-4dc3-bc65-daa5d2389ba9",     // id printed by scripts/deploy_vapi_assistant.py
+  vapiAssistantId: "9a13fdac-9734-4dc3-bc65-daa5d2389ba9",     // dental; id printed by scripts/deploy_vapi_assistant.py
+  // Assistant per business set (python scripts/deploy_vapi_assistant.py --business <id> prints the id).
+  vapiAssistants: { sushi: "", plumber: "", locksmith: "" },
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   defaultMode: "replay"    // "replay" or "live"
 };

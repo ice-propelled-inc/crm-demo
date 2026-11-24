@@ -1,11 +1,17 @@
-"""Create or update the demo Vapi assistant from docs/agent-config.json and docs/schedule.json.
+"""Create or update the demo Vapi assistant of one business set and point the Vapi SIP number at it.
 
-Also creates or updates the Vapi SIP number (VAPI_SIP_URI) that Twilio forwards unanswered calls to.
+Business sets: "dental" (docs/agent-config.json and docs/schedule.json) or a folder in
+docs/crm-demo-local/businesses (sushi, plumber, locksmith). Each set gets its own assistant
+("<name> demo"); its server URL carries ?biz=<set>, so the backend uses that set's services and schedule.
+The Vapi SIP number (VAPI_SIP_URI) that Twilio forwards unanswered calls to answers with the assistant
+deployed last: deploying a set switches the phone line to it.
 
 Usage:
     $env:VAPI_API_KEY = "<private API key from the Vapi dashboard>"
-    python scripts/deploy_vapi_assistant.py            # create or update
-    python scripts/deploy_vapi_assistant.py --dry-run  # print the payload only
+    python scripts/deploy_vapi_assistant.py                       # dental
+    python scripts/deploy_vapi_assistant.py --business sushi      # sushi restaurant
+    python scripts/deploy_vapi_assistant.py --business plumber --dry-run   # print the payload only
+    python scripts/deploy_vapi_assistant.py --business locksmith --no-sip  # assistant only, phone line unchanged
 
 Shared values are read from supabase/.env (same file as the Edge Function secrets):
     VAPI_SECRET, VAPI_SIP_URI, FUNCTIONS_PUBLIC_URL
@@ -27,6 +33,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 API = "https://api.vapi.ai"
+BUSINESSES = ROOT / "docs" / "crm-demo-local" / "businesses"
+NOW = '{{"now" | date: "%A, %B %d, %Y, %I:%M %p", "TZ"}}'
+
+
+def business_dir(business: str) -> Path:
+    if business == "dental":
+        return ROOT / "docs"
+    d = BUSINESSES / business
+    if not (d / "agent-config.json").exists():
+        known = ", ".join(["dental"] + sorted(p.name for p in BUSINESSES.iterdir() if (p / "agent-config.json").exists()))
+        sys.exit(f"Unknown business set {business!r}. Known: {known}")
+    return d
 
 
 def load_env() -> dict[str, str]:
@@ -107,9 +125,52 @@ def build_prompt(config: dict, schedule: dict) -> str:
     return "\n".join(lines)
 
 
-def build_assistant(config: dict, schedule: dict, env: dict[str, str]) -> dict:
+def business_prompt(config: dict) -> str:
+    """Prompt of a non-dental set: prompts.agent with the live date, plus the knowledge base, menu and services."""
+    biz = config["business"]
+    lines = [
+        config["prompts"]["agent"].replace("{{now}}", NOW.replace("TZ", biz["timezone"])),
+        "",
+        "## Funnel stages (id: label)",
+        *[f"- {s['id']}: {s['label']}" for s in config["funnel_stages"]],
+        "",
+        "## Script (step id / stage: what to say or do)",
+        *[f"- {s['step']} / {s['stage']}: {s.get('say') or s.get('goal')}" for s in config["script"]],
+        "",
+        "## Fields for update_call_state and book_slot (field id: label)",
+        *[
+            f"- {f['id']}: {f['label']}{' (required)' if f['required'] else ' (optional)'}"
+            + (f" - {f['note']}" if f.get("note") else "")
+            for f in config["appointment_fields"]
+        ],
+        "",
+        f"## Services (service_id: name, price in {biz['currency']}, duration)",
+        *[
+            f"- {s['id']}: {s['name']}, {s['price_min']}-{s['price_max']}"
+            + (f" ({s['price_note']})" if s.get("price_note") else "")
+            + f", about {s['duration_min']} min{', urgent' if s['urgent'] else ''}"
+            for s in config["services"]
+        ],
+        "",
+        "## Rules",
+        *[f"- {r}" for v in config["rules"].values() for r in (v if isinstance(v, list) else [v])],
+        "",
+        "## Handoff",
+        *[f"- {t['description']} (handoff_reason: {t['id']})" for t in config["handoff"]["triggers"]],
+        *[f"- {s}" for s in config["handoff"].get("handoff_steps", [])],
+        f'Before the transfer say: "{config["handoff"]["say_before_transfer"]}"',
+    ]
+    menu = config["knowledge_base"].get("menu")
+    if menu:
+        lines += ["", f"## Menu (prices in {biz['currency']})",
+                  *[f"- {m['name']}, {m['price']}" + (f" - {m['description']}" if m.get("description") else "") for m in menu]]
+    lines += ["", "## Knowledge base", *[f"Q: {f['q']}\nA: {f['a']}" for f in config["knowledge_base"]["faq"]]]
+    return "\n".join(lines)
+
+
+def build_assistant(config: dict, schedule: dict, env: dict[str, str], business: str = "dental") -> dict:
     server = {
-        "url": env["FUNCTIONS_PUBLIC_URL"].rstrip("/") + "/vapi-webhook",
+        "url": env["FUNCTIONS_PUBLIC_URL"].rstrip("/") + f"/vapi-webhook?biz={business}",
         "headers": {"x-vapi-secret": env["VAPI_SECRET"]},
     }
     tools = [
@@ -122,20 +183,22 @@ def build_assistant(config: dict, schedule: dict, env: dict[str, str]) -> dict:
         "destinations": [{
             "type": "sip",
             "sipUri": env.get("ADMIN_TRANSFER_SIP", "sip:admin@transfer.invalid"),
-            "description": "Clinic administrator",
+            "description": config.get("labels", {}).get("admin", "Clinic administrator"),
         }],
     })
     stt = config["speech_to_text"]
     greet = next(s["say"] for s in config["script"] if s["step"] == "greet")
+    info = config.get("clinic") or config["business"]
+    prompt = build_prompt(config, schedule) if business == "dental" else business_prompt(config)
     return {
-        "name": f"{config['clinic']['name']} demo",
+        "name": f"{info['name']} demo",
         "firstMessage": greet,
         "firstMessageMode": "assistant-speaks-first",
         "model": {
             "provider": env.get("VAPI_MODEL_PROVIDER", "openai"),
             "model": env.get("VAPI_MODEL", "gpt-4o-mini"),
             "temperature": 0.3,
-            "messages": [{"role": "system", "content": build_prompt(config, schedule)}],
+            "messages": [{"role": "system", "content": prompt}],
             "tools": tools,
         },
         "voice": {"provider": env.get("VAPI_VOICE_PROVIDER", "vapi"), "voiceId": env.get("VAPI_VOICE_ID", "Elliot")},
@@ -165,6 +228,8 @@ def call(method: str, path: str, key: str, body: dict | None = None):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--business", default="dental", help="business set: dental (default), sushi, plumber, locksmith")
+    parser.add_argument("--no-sip", action="store_true", help="do not point the Vapi SIP number at this assistant")
     parser.add_argument("--dry-run", action="store_true", help="print the assistant payload and exit")
     args = parser.parse_args()
 
@@ -176,9 +241,10 @@ def main() -> None:
         env = {"VAPI_SECRET": "<secret>", "VAPI_SIP_URI": "sip:<name>@sip.vapi.ai",
                "FUNCTIONS_PUBLIC_URL": "https://<ref>.supabase.co/functions/v1", **{k: v for k, v in env.items() if v}}
 
-    config = json.loads((ROOT / "docs" / "agent-config.json").read_text(encoding="utf-8"))
-    schedule = json.loads((ROOT / "docs" / "schedule.json").read_text(encoding="utf-8"))
-    assistant = build_assistant(config, schedule, env)
+    folder = business_dir(args.business)
+    config = json.loads((folder / "agent-config.json").read_text(encoding="utf-8"))
+    schedule = json.loads((folder / "schedule.json").read_text(encoding="utf-8"))
+    assistant = build_assistant(config, schedule, env, args.business)
 
     if args.dry_run:
         shown = json.loads(json.dumps(assistant))
@@ -198,6 +264,9 @@ def main() -> None:
         result = call("POST", "/assistant", key, assistant)
         print(f"Created assistant {result['id']}")
     assistant_id = result["id"]
+    print(f'Put it in docs/crm-demo-local/config.js: vapiAssistants: {{ {args.business}: "{assistant_id}" }}')
+    if args.no_sip:
+        return
 
     sip_uri = env["VAPI_SIP_URI"]
     numbers = call("GET", "/phone-number?limit=100", key)

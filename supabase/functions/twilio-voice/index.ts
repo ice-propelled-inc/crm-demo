@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-// Twilio voice webhook for the clinic number. Call routing:
+// Twilio voice webhook for the clinic number (<functions>/twilio-voice?biz=<business set>, dental by default). Call routing:
 //   incoming        ring the admin softphone for admin_ring_timeout_sec
 //   after-admin     no answer -> forward to the Vapi assistant over SIP
 //   refer           Vapi transferCall (SIP REFER) -> ring the admin softphone again
@@ -7,7 +7,7 @@
 //   client-answered admin answered (status callback)
 //   vapi-done       the Vapi leg ended without a transfer
 //   recording       recording of the administrator's call is ready
-import { db, env, loadConfig, systemMessage } from "../_shared/common.ts";
+import { db, env, loadConfig, loadConfigForCall, normBiz, systemMessage } from "../_shared/common.ts";
 import { ensureDraft } from "../_shared/tools.ts";
 
 const xmlEsc = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" }[c]!));
@@ -54,13 +54,13 @@ Deno.serve(async (req) => {
 
   const q = new URL(req.url).searchParams;
   const callId = q.get("call_id") || "";
-  const { config } = await loadConfig();
+  const { config } = callId ? await loadConfigForCall(callId) : await loadConfig(normBiz(q.get("biz")));
   const ring = config.clinic.admin_ring_timeout_sec;
 
   switch (q.get("step") || "incoming") {
     case "incoming": {
       const { data, error } = await db.from("calls")
-        .insert({ phone: p.From, twilio_call_sid: p.CallSid, status: "ringing", mode: "ringing" }).select("id").single();
+        .insert({ phone: p.From, business: normBiz(q.get("biz")), twilio_call_sid: p.CallSid, status: "ringing", mode: "ringing" }).select("id").single();
       if (error) throw new Error(error.message);
       return twiml(
         `<Dial timeout="${ring}" answerOnBridge="true" record="record-from-answer-dual" ` +
