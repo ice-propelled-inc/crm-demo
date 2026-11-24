@@ -153,7 +153,8 @@ def call(method: str, path: str, key: str, body: dict | None = None):
     req = urllib.request.Request(
         API + path, method=method,
         data=json.dumps(body).encode() if body is not None else None,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        # Cloudflare in front of api.vapi.ai rejects the default Python-urllib user agent (error 1010).
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "crm-demo-deploy/1.0"},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
