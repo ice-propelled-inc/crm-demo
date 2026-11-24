@@ -411,7 +411,7 @@ function setLiveStatus(text, cls = '') {
 }
 
 const Live = {
-  sb: null, channel: null, device: null, stt: null,
+  sb: null, channel: null, device: null, stt: null, fake: null, fakeRing: null, fakeCall: null,
 
   async start() {
     if (!isLiveConfigured()) { setLiveStatus('Not configured', 'warn'); return; }
@@ -423,6 +423,7 @@ const Live = {
     } catch (e) {
       console.error(e); setLiveStatus('Error', 'bad'); toast(e.message); return;
     }
+    if (CFG.enableFakeCall) this.fake = FakeCall.join(this.sb, (ev, p) => this.onFake(ev, p).catch(e => { console.error(e); toast('Fake call: ' + e.message); }));
     if (CFG.enableSoftphone) this.initSoftphone().catch(e => { console.error(e); toast('Softphone: ' + e.message); });
   },
 
@@ -458,6 +459,8 @@ const Live = {
   async stop() {
     this.stopTranscription();
     if (this.device) { this.device.destroy(); this.device = null; }
+    this.endFake();
+    if (this.fake) { await this.sb.removeChannel(this.fake); this.fake = null; }
     if (this.channel) { await this.sb.removeChannel(this.channel); this.channel = null; }
     this.sb = null;
     setLiveStatus('');
@@ -516,7 +519,7 @@ const Live = {
   },
 
   answer(call, callId) {
-    call.on('accept', () => this.startTranscription(call, callId).catch(e => { console.error(e); toast('Transcription: ' + e.message); }));
+    call.on('accept', () => this.startTranscription(call.getLocalStream(), call.getRemoteStream(), callId).catch(e => { console.error(e); toast('Transcription: ' + e.message); }));
     call.accept();
     App.incoming = null;
     if (callId) App.activeCallId = callId;
@@ -524,7 +527,7 @@ const Live = {
     render();
   },
 
-  async startTranscription(call, callId) {
+  async startTranscription(localStream, remoteStream, callId) {
     const { key, scheme } = await this.fn('deepgram-token', {});
     const stt = App.config.speech_to_text;
     const params = new URLSearchParams({
@@ -536,8 +539,8 @@ const Live = {
 
     const ctx = new AudioContext({ sampleRate: 16000 });
     const merger = ctx.createChannelMerger(2);
-    ctx.createMediaStreamSource(call.getLocalStream()).connect(merger, 0, 0);   // channel 0: administrator
-    ctx.createMediaStreamSource(call.getRemoteStream()).connect(merger, 0, 1);  // channel 1: caller
+    ctx.createMediaStreamSource(localStream).connect(merger, 0, 0);   // channel 0: administrator
+    ctx.createMediaStreamSource(remoteStream).connect(merger, 0, 1);  // channel 1: caller
     const proc = ctx.createScriptProcessor(4096, 2, 2);
     merger.connect(proc);
     proc.connect(ctx.destination); // output stays silent; needed to keep the processor running
@@ -562,6 +565,54 @@ const Live = {
     };
     const keep = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'KeepAlive' })), 8000);
     this.stt = { ws, ctx, keep };
+  },
+
+  /* Fake page-to-page call from caller.html (see fakecall.js). */
+  async onFake(ev, p) {
+    const fake = (event, payload = {}) => FakeCall.send(this.fake, event, { call_id: p.call_id, ...payload });
+    if (ev === 'ring' && !this.fakeCall) {
+      this.fakeRing = p.call_id;
+      App.incoming = {
+        phone: p.phone,
+        label: p.transfer ? 'Transfer from AI assistant' : 'Incoming call',
+        ringUntil: p.transfer ? null : Date.now() + App.config.clinic.admin_ring_timeout_sec * 1000,
+        canAnswer: true,
+        onAnswer: () => this.fakeAnswer(p.call_id).catch(e => { console.error(e); toast('Fake call: ' + e.message); }),
+        onDecline: () => { fake('decline'); this.fakeRing = null; App.incoming = null; render(); },
+      };
+      render();
+    } else if (ev === 'cancel' && this.fakeRing === p.call_id) {
+      // Timeout: the caller page switches to the AI assistant.
+      this.fakeRing = null; App.incoming = null; render();
+    } else if (ev === 'offer' && this.fakeCall?.callId === p.call_id) {
+      const fc = this.fakeCall;
+      fc.pc = FakeCall.peer(fc.mic, remote => {
+        FakeCall.play(remote);
+        if (!this.stt) this.startTranscription(fc.mic, remote, fc.callId).catch(e => { console.error(e); toast('Transcription: ' + e.message); });
+      });
+      fake('answer', { sdp: await FakeCall.answer(fc.pc, p.sdp) });
+    } else if (ev === 'hangup' && this.fakeCall?.callId === p.call_id) {
+      this.endFake();
+    }
+  },
+
+  async fakeAnswer(callId) {
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    this.fakeCall = { callId, mic, pc: null };
+    this.fakeRing = null;
+    FakeCall.send(this.fake, 'accept', { call_id: callId });
+    App.incoming = null;
+    App.activeCallId = callId;
+    App.view = 'calls';
+    render();
+    await this.fn('fake-call', { action: 'answered', call_id: callId });
+  },
+
+  endFake() {
+    if (!this.fakeCall) return;
+    this.stopTranscription();
+    FakeCall.close(this.fakeCall.pc, this.fakeCall.mic);
+    this.fakeCall = null;
   },
 
   stopTranscription() {

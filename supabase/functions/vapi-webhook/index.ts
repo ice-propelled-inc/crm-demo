@@ -4,12 +4,20 @@
 import { db, digits, env, json, systemMessage } from "../_shared/common.ts";
 import { runTool } from "../_shared/tools.ts";
 
-// Find the call row created by twilio-voice (matched by caller number), or create one.
+// Find the call row created by twilio-voice (matched by caller number) or fake-call (by metadata), or create one.
 async function ensureCall(vc: any): Promise<string> {
   const vid = vc?.id;
   if (!vid) throw new Error("Vapi message without call id");
   const byVapi = await db.from("calls").select("id").eq("vapi_call_id", vid).limit(1);
   if (byVapi.data?.[0]) return byVapi.data[0].id;
+
+  // Vapi web call from the fake caller page: the page passes its calls.id in the metadata.
+  const metaId = vc.metadata?.call_id ?? vc.assistantOverrides?.metadata?.call_id;
+  if (metaId) {
+    const { data } = await db.from("calls").update({ vapi_call_id: vid, status: "active", mode: "ai" })
+      .eq("id", metaId).is("vapi_call_id", null).select("id");
+    if (data?.[0]) return data[0].id;
+  }
 
   const phone = vc.customer?.number ?? null;
   const since = new Date(Date.now() - 10 * 60_000).toISOString();
