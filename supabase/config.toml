@@ -1,0 +1,18 @@
+project_id = "dental-call-desk"
+
+# Webhooks from Twilio and Vapi carry no Supabase JWT; they are checked by signature / secret instead.
+[functions.twilio-voice]
+verify_jwt = false
+
+[functions.vapi-webhook]
+verify_jwt = false
+
+# Called by the page with the anon key (JWT checked by Supabase) and the optional admin PIN.
+[functions.twilio-token]
+verify_jwt = true
+
+[functions.deepgram-token]
+verify_jwt = true
+
+[functions.observe]
+verify_jwt = true

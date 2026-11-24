@@ -29,3 +29,6 @@ frontend/*/dist/
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+
+# Supabase CLI local state
+supabase/.temp/

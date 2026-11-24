@@ -24,8 +24,8 @@
  *   transfer  "1" when the call is a transfer from the AI assistant
  */
 window.DEMO_CONFIG = {
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://vhduwkhohqarrxysdcvc.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoZHV3a2hvaHFhcnJ4eXNkY3ZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MzEzMjgsImV4cCI6MjExMTEwNzMyOH0.m_TxMRnu1G40dZa0Ay2IhIPNdcL6I3ribsBAA4-LTsY",
   functionsUrl: "",        // default: <supabaseUrl>/functions/v1
   enableSoftphone: true,
   defaultMode: "replay"    // "replay" or "live"

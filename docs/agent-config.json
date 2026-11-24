@@ -135,13 +135,14 @@
   "tools": [
     {
       "name": "get_free_slots",
-      "description": "Return free slots for a service, optionally for one doctor and from a given date.",
+      "description": "Return free slots for a service, optionally for one doctor. With date only: slots on that date. With time: slots at that time on that date or later dates (for 'same time, another date'). Without both: the nearest slots.",
       "parameters": {
         "type": "object",
         "properties": {
           "service_id": { "type": "string" },
           "doctor_id": { "type": "string" },
           "date": { "type": "string", "format": "date" },
+          "time": { "type": "string", "description": "HH:MM" },
           "limit": { "type": "integer", "default": 5 }
         },
         "required": ["service_id"]

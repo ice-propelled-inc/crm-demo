@@ -463,13 +463,25 @@ const Live = {
     setLiveStatus('');
   },
 
-  async fn(name, body) {
+  async fn(name, body, retried = false) {
     const base = CFG.functionsUrl || `${CFG.supabaseUrl}/functions/v1`;
+    let pin = '';
+    try { pin = localStorage.getItem('adminPin') || ''; } catch (_) { /* storage unavailable */ }
     const r = await fetch(`${base}/${name}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CFG.supabaseAnonKey}`, apikey: CFG.supabaseAnonKey },
+      headers: {
+        'Content-Type': 'application/json', Authorization: `Bearer ${CFG.supabaseAnonKey}`,
+        apikey: CFG.supabaseAnonKey, 'x-admin-pin': pin,
+      },
       body: JSON.stringify(body || {}),
     });
+    if (r.status === 401 && !retried) {
+      const entered = prompt('Admin PIN');
+      if (entered) {
+        try { localStorage.setItem('adminPin', entered); } catch (_) { /* storage unavailable */ }
+        return this.fn(name, body, true);
+      }
+    }
     if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
     return r.json();
   },
@@ -513,14 +525,14 @@ const Live = {
   },
 
   async startTranscription(call, callId) {
-    const { key } = await this.fn('deepgram-token', {});
+    const { key, scheme } = await this.fn('deepgram-token', {});
     const stt = App.config.speech_to_text;
     const params = new URLSearchParams({
       model: stt.model, language: stt.language, encoding: 'linear16', sample_rate: '16000',
       channels: '2', multichannel: 'true', smart_format: 'true', punctuate: 'true',
     });
     stt.keyterms.forEach(k => params.append('keyterm', k));
-    const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, ['token', key]);
+    const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, [scheme || 'token', key]);
 
     const ctx = new AudioContext({ sampleRate: 16000 });
     const merger = ctx.createChannelMerger(2);
