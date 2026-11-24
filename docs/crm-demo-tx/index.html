@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dental Call Desk</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">BS</span><span id="clinicName">Clinic</span></div>
+    <nav class="tabs" id="tabs">
+      <button data-view="calls" class="active">Calls</button>
+      <button data-view="schedule">Schedule</button>
+      <button data-view="appointments">Appointments</button>
+      <button data-view="history">History</button>
+      <button data-view="settings">AI Settings</button>
+    </nav>
+    <div class="mode">
+      <label for="modeSelect">Mode</label>
+      <select id="modeSelect">
+        <option value="replay">Replay</option>
+        <option value="live">Live</option>
+      </select>
+      <span id="liveStatus" class="pill"></span>
+    </div>
+  </header>
+
+  <div id="replayBar" class="replaybar">
+    <span class="muted">Replay a scripted call:</span>
+    <button data-scenario="uc1">UC1 · AI books</button>
+    <button data-scenario="uc2">UC2 · Admin answers</button>
+    <button data-scenario="uc3">UC3 · Handoff</button>
+    <button data-scenario="uc3noanswer">UC3 · Admin not available</button>
+    <label>Speed
+      <select id="speedSelect">
+        <option value="1">1×</option>
+        <option value="2" selected>2×</option>
+        <option value="4">4×</option>
+      </select>
+    </label>
+    <button id="stopReplay" class="ghost">Stop</button>
+  </div>
+
+  <div id="incoming" class="incoming hidden"></div>
+  <main id="view"></main>
+  <div id="toast" class="toast hidden"></div>
+
+  <audio id="remoteAudio" autoplay></audio>
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="app.js"></script>
+  <script src="replay.js"></script>
+</body>
+</html>
