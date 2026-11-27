@@ -5,7 +5,33 @@
     "language": "en",
     "timezone": "America/Toronto",
     "currency": "CAD",
-    "admin_ring_timeout_sec": 5
+    "admin_ring_timeout_sec": 5,
+    "chat_timeout_sec": 30
+  },
+
+  "settings": {
+    "operation_mode": "overflow",
+    "operation_modes": [
+      { "id": "copilot", "label": "Copilot", "call": "Ring the administrator; the administrator talks and the AI only assists (UC2). No answer within the ring timeout: the AI takes a message (name, phone, reason), saves a Draft and creates a callback task. It does not book.", "chat": "The administrator replies; the AI shows intake and suggestions. No reply within the chat timeout: the AI takes a message as for calls." },
+      { "id": "overflow", "label": "Overflow", "call": "Administrator Available: ring the administrator for the ring timeout, then the AI answers. Busy or Offline: the AI answers at once.", "chat": "Administrator Available: wait the chat timeout for the administrator, then the AI replies. Busy or Offline: the AI replies at once." },
+      { "id": "autonomous", "label": "Autonomous", "call": "The AI answers every call at once.", "chat": "The AI replies to every chat at once." }
+    ],
+    "admin_availability": "available",
+    "admin_availability_values": [
+      { "id": "available", "label": "Available" },
+      { "id": "busy", "label": "Busy", "meaning": "The AI answers at once in Overflow mode; a handoff creates a callback task instead of a live transfer" },
+      { "id": "offline", "label": "Offline", "meaning": "Same as Busy" }
+    ],
+    "notifications": {
+      "channel": "off",
+      "channels": ["off", "sms", "email"],
+      "events": {
+        "booked": { "enabled": false, "template": "Hi {name}, your {service} appointment at {clinic.name} is booked for {date} at {time} with {doctor}." },
+        "rescheduled": { "enabled": false, "template": "Hi {name}, your {service} appointment at {clinic.name} is moved to {date} at {time} with {doctor}." },
+        "cancelled": { "enabled": false, "template": "Hi {name}, your {service} appointment at {clinic.name} on {date} at {time} is cancelled." },
+        "reminder": { "enabled": false, "hours_before": 24, "template": "Reminder: {name}, you have a {service} appointment at {clinic.name} on {date} at {time} with {doctor}." }
+      }
+    }
   },
 
   "knowledge_base": {
@@ -15,6 +41,7 @@
       { "q": "Is there parking?", "a": "Yes, free parking behind the building." },
       { "q": "How can I pay?", "a": "Cash, credit and debit cards." },
       { "q": "Do you accept insurance?", "a": "Yes, most major dental insurance plans. Please bring your insurance card to the visit." },
+      { "q": "Do you accept the Canadian Dental Care Plan (CDCP)?", "a": "Yes, we see CDCP patients. CDCP is only for people who have no other dental insurance, so do you have any other dental plan? If not, please bring your CDCP member card and a photo ID. Our staff will check your eligibility and your co-payment with Sun Life before treatment, and will tell you about any cost you need to pay before we start. I cannot confirm coverage myself." },
       { "q": "What should I bring to the first visit?", "a": "A photo ID, your insurance card if you have one, and a list of medicines you take." },
       { "q": "How do I cancel or reschedule?", "a": "Call us at any time and the assistant will help you." }
     ],
@@ -34,21 +61,36 @@
 
   "appointment_fields": [
     { "id": "name", "label": "Patient name", "required": true },
-    { "id": "phone", "label": "Phone", "required": true, "note": "Auto-detected from caller ID; the caller confirms it" },
+    { "id": "phone", "label": "Phone", "required": true, "note": "Calls: auto-detected from caller ID, the caller confirms it. Chat: asked" },
     { "id": "service", "label": "Service", "required": true },
     { "id": "datetime", "label": "Date and time", "required": true },
     { "id": "patient_type", "label": "New or returning patient", "required": true, "values": ["new", "returning"] },
     { "id": "complaint", "label": "Complaint", "required": true },
     { "id": "doctor", "label": "Doctor", "required": false, "note": "If the caller has no preference, assigned automatically later" },
-    { "id": "insurance_number", "label": "Insurance number", "required": false }
+    { "id": "insurance_type", "label": "Insurance type", "required": false, "values": ["none", "private", "cdcp"], "note": "See rules.insurance" },
+    { "id": "insurance_company", "label": "Insurance company", "required": false, "note": "Only for a private plan" },
+    { "id": "insurance_member_id", "label": "Insurance member ID", "required": false, "note": "Private plan member ID or CDCP member ID" }
   ],
 
   "appointment_statuses": [
-    { "id": "draft", "label": "Draft", "meaning": "Data is still being collected, or the call ended before booking" },
+    { "id": "draft", "label": "Draft", "meaning": "Data is still being collected, or the conversation ended before booking" },
     { "id": "filled", "label": "Filled", "meaning": "All required fields are filled and the slot is booked" },
     { "id": "completed", "label": "Completed", "meaning": "The patient came to the visit; set by the administrator" },
     { "id": "cancelled", "label": "Cancelled", "meaning": "The appointment was cancelled" },
     { "id": "missed", "label": "Missed", "meaning": "The patient did not come to the visit; set by the administrator (Dentitek statusRdv 'M')" }
+  ],
+
+  "task_types": [
+    { "id": "callback", "label": "Callback", "created_when": "A handoff was not picked up, the administrator is Busy or Offline during a handoff, or Copilot mode took a message" },
+    { "id": "urgent_callback", "label": "Urgent callback", "created_when": "An urgent case could not be transferred; shown first in the list" },
+    { "id": "coverage_check", "label": "Coverage check", "created_when": "An appointment is booked with a private plan or CDCP" }
+  ],
+
+  "task_statuses": [
+    { "id": "pending", "label": "Pending", "set_by": "System (on creation)" },
+    { "id": "acknowledged", "label": "Acknowledged", "set_by": "Administrator (working on it)" },
+    { "id": "resolved", "label": "Resolved", "set_by": "Administrator (done)" },
+    { "id": "declined", "label": "Declined", "set_by": "Administrator (not needed)" }
   ],
 
   "funnel_stages": [
@@ -72,16 +114,18 @@
     { "step": "ask_doctor", "stage": "service", "collects": ["doctor"], "say": "Do you have a preferred doctor, or is any available doctor fine?" },
 
     { "step": "ask_name", "stage": "patient_details", "collects": ["name"], "say": "May I have your full name, please?" },
-    { "step": "confirm_phone", "stage": "patient_details", "collects": ["phone"], "say": "Is {caller_phone} the best number to reach you?" },
+    { "step": "confirm_phone", "stage": "patient_details", "collects": ["phone"], "say": "Is {caller_phone} the best number to reach you?", "chat_say": "What is the best phone number to reach you?" },
     { "step": "ask_patient_type", "stage": "patient_details", "collects": ["patient_type"], "say": "Have you visited our clinic before?" },
-    { "step": "ask_insurance", "stage": "patient_details", "collects": ["insurance_number"], "say": "Do you have dental insurance? If so, you can tell me the insurance number, or bring the card to the visit." },
+    { "step": "ask_insurance", "stage": "patient_details", "collects": ["insurance_type"], "say": "Do you have a private dental insurance plan, for example through work?" },
+    { "step": "ask_private_plan", "stage": "patient_details", "collects": ["insurance_company", "insurance_member_id"], "when": "insurance_type is private", "say": "Which insurance company is it? You can also tell me the member ID, or just bring the card to the visit." },
+    { "step": "ask_cdcp", "stage": "patient_details", "collects": ["insurance_type", "insurance_member_id"], "when": "no private plan", "say": "Are you covered by the Canadian Dental Care Plan? If so, you can tell me your CDCP member ID, and please bring your CDCP member card and a photo ID." },
 
     { "step": "lookup_appointment", "stage": "appointment_lookup", "goal": "Find the existing appointment by phone; see rules.appointment_lookup" },
 
     { "step": "ask_day", "stage": "slot_selection", "say": "Would you like the nearest available day, or do you have a preferred day?" },
     { "step": "propose_time", "stage": "slot_selection", "collects": ["datetime"], "goal": "Propose a time on that day; if it does not fit, offer three alternatives per rules.slot_selection" },
 
-    { "step": "confirm", "stage": "confirmation", "goal": "Repeat service, doctor, date and time, and patient name; book the slot" },
+    { "step": "confirm", "stage": "confirmation", "goal": "Repeat service, doctor, date and time, and patient name; book the slot; with insurance, create a coverage_check task; mention a confirmation message only if rules.notifications allows it" },
     { "step": "close", "stage": "closing", "say": "You are all set. Is there anything else I can help you with? Have a great day!" }
   ],
 
@@ -98,14 +142,25 @@
       "If exactly one appointment is found, confirm the patient name and the date.",
       "If none or more than one is found, ask for the patient name and the date."
     ],
-    "booking": "Book the slot yourself once all required fields are collected. Do not send an SMS confirmation.",
+    "booking": "Book the slot yourself once all required fields are collected. No approval by the administrator is needed. Slots are not held during the conversation; if the slot was taken in the meantime, offer the alternatives from rules.slot_selection.",
+    "notifications": "Confirmation and reminder messages are sent by the system only when settings.notifications has the channel on and the event enabled. Tell the caller about a message only in that case.",
+    "copilot_message": "In Copilot mode, when the administrator did not answer: take a message (name, phone, reason), call create_task with type callback, and do not book.",
+    "chat": "In the chat, follow the same script, rules and tools. Ask for the phone number. A handoff invites the administrator into the chat; if nobody joins within clinic.chat_timeout_sec, create a callback task.",
+    "insurance": [
+      "Ask about a private dental plan first. CDCP is only for people with no other dental insurance.",
+      "Private plan: ask the insurance company and, optionally, the member ID. Say that staff will check the coverage with the plan and the patient should bring the insurance card.",
+      "No private plan: ask about CDCP. If covered, ask the CDCP member ID (optional) and say to bring the CDCP member card and a photo ID.",
+      "Never confirm eligibility, coverage, co-payment or the amount the plan pays. Say that staff will check it before treatment and tell the patient about any cost to pay before treatment starts.",
+      "After booking with a private plan or CDCP, call create_task with type coverage_check."
+    ],
+    "tasks": "Call create_task when the administrator must act after the conversation: callback, urgent_callback or coverage_check (see task_types).",
     "state_updates": "Call update_call_state after every script step."
   },
 
   "handoff": {
     "triggers": [
       { "id": "out_of_knowledge_base", "description": "The question is not covered by the knowledge base or the services list" },
-      { "id": "urgent_case", "description": "The caller mentions severe pain, injury, swelling or bleeding" },
+      { "id": "urgent_case", "urgent": true, "description": "The caller mentions severe pain, injury, swelling or bleeding" },
       { "id": "human_requested", "description": "The caller asks to speak to a person" }
     ],
     "urgent_case_steps": [
@@ -116,8 +171,11 @@
     "say_before_transfer": "I want to make sure you get the best help, so I'll connect you with our administrator now. Please stay on the line.",
     "admin_no_answer": {
       "say": "I'm sorry, our administrator is not available right now. I've saved your details and we will call you back as soon as possible.",
-      "save_status": "draft"
-    }
+      "save_status": "draft",
+      "create_task": "callback",
+      "create_task_urgent": "urgent_callback"
+    },
+    "admin_busy_or_offline": "Do not transfer. Say the admin_no_answer text, save a Draft and create a callback task (urgent_callback for an urgent case)."
   },
 
   "speech_to_text": {
@@ -161,7 +219,9 @@
           "phone": { "type": "string" },
           "patient_type": { "type": "string", "enum": ["new", "returning"] },
           "complaint": { "type": "string" },
-          "insurance_number": { "type": "string" }
+          "insurance_type": { "type": "string", "enum": ["none", "private", "cdcp"] },
+          "insurance_company": { "type": "string" },
+          "insurance_member_id": { "type": "string" }
         },
         "required": ["service_id", "start", "name", "phone", "patient_type", "complaint"]
       }
@@ -221,7 +281,9 @@
               "patient_type": { "type": "string" },
               "complaint": { "type": "string" },
               "doctor": { "type": "string" },
-              "insurance_number": { "type": "string" }
+              "insurance_type": { "type": "string" },
+              "insurance_company": { "type": "string" },
+              "insurance_member_id": { "type": "string" }
             }
           },
           "handoff_reason": { "type": "string", "enum": ["out_of_knowledge_base", "urgent_case", "human_requested"] }
@@ -230,8 +292,23 @@
       }
     },
     {
+      "name": "create_task",
+      "description": "Create a task for the administrator: a callback, an urgent callback, or a coverage check after a booking with insurance.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["callback", "urgent_callback", "coverage_check"] },
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "reason": { "type": "string" },
+          "appointment_id": { "type": "string" }
+        },
+        "required": ["type", "phone"]
+      }
+    },
+    {
       "name": "transfer_to_admin",
-      "description": "Transfer the call live to the administrator softphone. Maps to Vapi transferCall.",
+      "description": "Hand off to the administrator: a live call transfer to the softphone (Vapi transferCall), or an invite to the chat. Only when the administrator is Available.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -244,6 +321,7 @@
 
   "prompts": {
     "agent": "You are the phone assistant of {clinic.name}. Talk to the caller in English, follow the script, the rules and the handoff triggers, use only the knowledge base and the services list, and call the tools.",
-    "observer": "You observe a phone call between the clinic administrator and a caller. Do not talk. Read the transcript and return JSON with the current stage, script_step and the collected fields, using the same stages, script and fields as the agent."
+    "chat": "You are the web chat assistant of {clinic.name}. Write to the visitor in English, follow the same script, rules and handoff triggers as the phone assistant, use only the knowledge base and the services list, call the tools, and ask for the phone number.",
+    "observer": "You observe a phone call or chat between the clinic administrator and a caller. Do not talk. Read the transcript and return JSON with the current stage, script_step, the collected fields and suggestions (next question, matching free slots, knowledge-base answer, handoff warning), using the same stages, script and fields as the agent."
   }
 }

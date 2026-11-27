@@ -1,28 +1,31 @@
 {
   "version": 1,
-  "labels": {
-    "business": "Business",
-    "resource": "Technician",
-    "resources": "Technician",
-    "customer": "Customer",
-    "booking": "Job",
-    "bookings": "Jobs",
-    "admin": "Mike (owner)",
-    "logo": "RF",
-    "resource_field": "technician",
-    "closed": "No scheduled jobs on this day. The emergency line is open 24/7."
+  "labels": { "business": "Business", "resource": "Technician", "resources": "Technician", "customer": "Customer", "booking": "Job", "bookings": "Jobs", "admin": "Mike (owner)", "logo": "RF", "resource_field": "technician", "closed": "No scheduled jobs on this day. The emergency line is open 24/7." },
+  "business": { "name": "Rapid Flow Plumbing", "type": "field_service", "language": "en", "timezone": "America/Toronto", "currency": "CAD", "admin_ring_timeout_sec": 5, "address": "Toronto, Ontario (mobile service, no walk-in office)", "emergency_line": "24/7", "chat_timeout_sec": 30 },
+  "settings": {
+    "operation_mode": "overflow",
+    "operation_modes": [
+      { "id": "copilot", "label": "Copilot", "call": "Ring Mike (owner); Mike (owner) talks and the AI only assists (UC2). No answer within the ring timeout: the AI takes a message (name, phone, reason), saves a Draft and creates a callback task. It does not book.", "chat": "Mike (owner) replies; the AI shows intake and suggestions. No reply within the chat timeout: the AI takes a message as for calls." },
+      { "id": "overflow", "label": "Overflow", "call": "Mike (owner) Available: ring for the ring timeout, then the AI answers. Busy or Offline: the AI answers at once.", "chat": "Mike (owner) Available: wait the chat timeout, then the AI replies. Busy or Offline: the AI replies at once." },
+      { "id": "autonomous", "label": "Autonomous", "call": "The AI answers every call at once.", "chat": "The AI replies to every chat at once." }
+    ],
+    "admin_availability": "available",
+    "admin_availability_values": [
+      { "id": "available", "label": "Available" },
+      { "id": "busy", "label": "Busy", "meaning": "The AI answers at once in Overflow mode; a handoff creates a callback task instead of a live transfer" },
+      { "id": "offline", "label": "Offline", "meaning": "Same as Busy" }
+    ],
+    "notifications": {
+      "channel": "off",
+      "channels": ["off", "sms", "email"],
+      "events": {
+        "booked": { "enabled": false, "template": "Hi {name}, your job with {clinic.name} is booked: {service}, {date} at {time}." },
+        "rescheduled": { "enabled": false, "template": "Hi {name}, your job with {clinic.name} is moved to {date} at {time}." },
+        "cancelled": { "enabled": false, "template": "Hi {name}, your job with {clinic.name} on {date} at {time} is cancelled." },
+        "reminder": { "enabled": false, "hours_before": 24, "template": "Reminder: {name}, your job with {clinic.name} is on {date} at {time}." }
+      }
+    }
   },
-  "business": {
-    "name": "Rapid Flow Plumbing",
-    "type": "field_service",
-    "language": "en",
-    "timezone": "America/Toronto",
-    "currency": "CAD",
-    "admin_ring_timeout_sec": 5,
-    "address": "Toronto, Ontario (mobile service, no walk-in office)",
-    "emergency_line": "24/7"
-  },
-
   "knowledge_base": {
     "faq": [
       { "q": "Who will come?", "a": "Mike Novak, a licensed plumber with 15 years of experience. He runs the business himself." },
@@ -37,12 +40,7 @@
     ],
     "files": []
   },
-
-  "service_area": {
-    "description": "Toronto: downtown, East York, the East End and the West End.",
-    "postal_prefixes": ["M4", "M5", "M6"]
-  },
-
+  "service_area": { "description": "Toronto: downtown, East York, the East End and the West End.", "postal_prefixes": ["M4", "M5", "M6"] },
   "services": [
     { "id": "diagnostic_visit", "name": "Diagnostic visit", "urgent": false, "price_min": 89, "price_max": 89, "price_note": "Call-out fee, credited toward the repair", "duration_min": 60, "speciality": "plumbing" },
     { "id": "leak_repair", "name": "Leak repair (pipes, under sink)", "urgent": false, "price_min": 150, "price_max": 450, "duration_min": 90, "speciality": "plumbing" },
@@ -52,10 +50,9 @@
     { "id": "water_heater", "name": "Water heater repair", "urgent": false, "price_min": 200, "price_max": 900, "duration_min": 120, "speciality": "plumbing" },
     { "id": "emergency", "name": "Emergency (burst pipe, flooding, sewage backup)", "urgent": true, "price_min": 199, "price_max": 600, "price_note": "After-hours call-out 149 included", "duration_min": 120, "speciality": "plumbing" }
   ],
-
   "appointment_fields": [
     { "id": "name", "label": "Customer name", "required": true },
-    { "id": "phone", "label": "Phone", "required": true, "note": "Auto-detected from caller ID; the caller confirms it" },
+    { "id": "phone", "label": "Phone", "required": true, "note": "Calls: auto-detected from caller ID, the caller confirms it. Chat: asked" },
     { "id": "address", "label": "Address and postal code", "required": true, "note": "Must be inside the service area" },
     { "id": "service", "label": "Service", "required": true },
     { "id": "problem", "label": "Problem description", "required": true },
@@ -64,15 +61,23 @@
     { "id": "access_notes", "label": "Access and parking", "required": false },
     { "id": "technician", "label": "Technician", "required": false, "note": "Only one technician; assigned automatically" }
   ],
-
   "appointment_statuses": [
-    { "id": "draft", "label": "Draft", "meaning": "Data is still being collected, or the call ended before booking" },
+    { "id": "draft", "label": "Draft", "meaning": "Data is still being collected, or the conversation ended before booking" },
     { "id": "filled", "label": "Scheduled", "meaning": "All required fields are filled and the visit is booked" },
     { "id": "completed", "label": "Done", "meaning": "The job is done; set by Mike" },
     { "id": "cancelled", "label": "Cancelled", "meaning": "The job was cancelled" },
     { "id": "missed", "label": "No access", "meaning": "Nobody was home or there was no access; set by Mike" }
   ],
-
+  "task_types": [
+    { "id": "callback", "label": "Callback", "created_when": "A handoff was not picked up, the administrator is Busy or Offline during a handoff, or Copilot mode took a message" },
+    { "id": "urgent_callback", "label": "Urgent callback", "created_when": "An urgent case could not be transferred; shown first in the list" }
+  ],
+  "task_statuses": [
+    { "id": "pending", "label": "Pending", "set_by": "System (on creation)" },
+    { "id": "acknowledged", "label": "Acknowledged", "set_by": "Administrator (working on it)" },
+    { "id": "resolved", "label": "Resolved", "set_by": "Administrator (done)" },
+    { "id": "declined", "label": "Declined", "set_by": "Administrator (not needed)" }
+  ],
   "funnel_stages": [
     { "id": "greeting", "label": "Greeting" },
     { "id": "intent", "label": "Intent" },
@@ -84,27 +89,46 @@
     { "id": "closing", "label": "Closing" },
     { "id": "handoff", "label": "Handoff to Mike" }
   ],
-
   "script": [
     { "step": "greet", "stage": "greeting", "say": "Hello, thank you for calling Rapid Flow Plumbing. How can I help you today?" },
     { "step": "ask_intent", "stage": "intent", "goal": "Find out if the caller has a plumbing problem, wants to change or cancel a visit, or has a question. Check for an emergency first." },
-
-    { "step": "ask_problem", "stage": "problem", "collects": ["problem"], "say": "Can you describe the problem? Where is it, and is water leaking right now?" },
-    { "step": "match_service", "stage": "problem", "collects": ["service"], "goal": "Match the problem to a service; tell the call-out fee and the price range, and that the final price is quoted on site" },
-
+    {
+      "step": "ask_problem",
+      "stage": "problem",
+      "collects": ["problem"],
+      "say": "Can you describe the problem? Where is it, and is water leaking right now?"
+    },
+    {
+      "step": "match_service",
+      "stage": "problem",
+      "collects": ["service"],
+      "goal": "Match the problem to a service; tell the call-out fee and the price range, and that the final price is quoted on site"
+    },
     { "step": "ask_address", "stage": "service_area", "collects": ["address"], "say": "What is the address, including the postal code?" },
-    { "step": "ask_property", "stage": "service_area", "collects": ["property_type", "access_notes"], "say": "Is it a house, a condo or a business? Anything Mike should know about parking or access?" },
-
+    {
+      "step": "ask_property",
+      "stage": "service_area",
+      "collects": ["property_type", "access_notes"],
+      "say": "Is it a house, a condo or a business? Anything Mike should know about parking or access?"
+    },
     { "step": "ask_name", "stage": "customer_details", "collects": ["name"], "say": "May I have your name, please?" },
-    { "step": "confirm_phone", "stage": "customer_details", "collects": ["phone"], "say": "Is {caller_phone} the best number? Mike will text when he is on the way." },
-
+    {
+      "step": "confirm_phone",
+      "stage": "customer_details",
+      "collects": ["phone"],
+      "say": "Is {caller_phone} the best number? Mike will text when he is on the way.",
+      "chat_say": "What is the best phone number to reach you?"
+    },
     { "step": "ask_day", "stage": "slot_selection", "say": "Would you like the earliest available visit, or do you have a preferred day?" },
-    { "step": "propose_time", "stage": "slot_selection", "collects": ["datetime"], "goal": "Propose an arrival time; if it does not fit, offer three alternatives per rules.slot_selection" },
-
+    {
+      "step": "propose_time",
+      "stage": "slot_selection",
+      "collects": ["datetime"],
+      "goal": "Propose an arrival time; if it does not fit, offer three alternatives per rules.slot_selection"
+    },
     { "step": "confirm", "stage": "confirmation", "goal": "Repeat the service, address, arrival time, name and the call-out fee; book the visit" },
     { "step": "close", "stage": "closing", "say": "You're all set. Mike will text you when he's on the way. Is there anything else I can help with?" }
   ],
-
   "rules": {
     "safety_first": "If the caller smells gas, tell them to leave the building now and call Enbridge Gas at 1-866-763-5427 or 911, then end the call. If water is near electrical outlets or the panel, tell them to stay out of the water.",
     "no_diagnosis": "Never diagnose the problem or promise a fixed price. Give the call-out fee and the price range, and say the final price is quoted on site and nothing starts without the customer's approval.",
@@ -116,13 +140,16 @@
       "Propose an arrival time on that day.",
       "If the time does not fit, propose three alternatives: the same day at another time; the same time on another day; the nearest free time within the next one or two days."
     ],
-    "booking": "Book the visit yourself once all required fields are collected. Do not send an SMS confirmation.",
-    "state_updates": "Call update_call_state after every script step."
+    "booking": "Book the visit yourself once all required fields are collected. No approval is needed. Slots are not held during the conversation; if the slot was taken in the meantime, offer the alternatives from rules.slot_selection.",
+    "state_updates": "Call update_call_state after every script step.",
+    "notifications": "Confirmation and reminder messages are sent by the system only when settings.notifications has the channel on and the event enabled. Tell the caller about a message only in that case.",
+    "copilot_message": "In Copilot mode, when nobody answered: take a message (name, phone, reason), call create_task with type callback, and do not book.",
+    "chat": "In the chat, follow the same script, rules and tools. Ask for the phone number. A handoff invites Mike (owner) into the chat; if nobody joins within business.chat_timeout_sec, create a callback task.",
+    "tasks": "Call create_task when someone must act after the conversation: callback or urgent_callback (see task_types)."
   },
-
   "handoff": {
     "triggers": [
-      { "id": "emergency", "description": "Active leak or burst pipe, flooding, sewage backup, or no water at all (24/7)" },
+      { "id": "emergency", "urgent": true, "description": "Active leak or burst pipe, flooding, sewage backup, or no water at all (24/7)" },
       { "id": "out_of_knowledge_base", "description": "The question is not covered by the knowledge base or the services list" },
       { "id": "human_requested", "description": "The caller asks to speak to Mike" }
     ],
@@ -133,22 +160,29 @@
       "Transfer the call even if some details are missing."
     ],
     "say_before_transfer": "I'm putting you through to Mike right now, so he can help you directly. Please stay on the line.",
-    "admin_no_answer": {
-      "say": "I'm sorry, Mike can't pick up right now. I've saved your details, and he will call you back within 15 minutes.",
-      "save_status": "draft"
-    }
+    "admin_no_answer": { "say": "I'm sorry, Mike can't pick up right now. I've saved your details, and he will call you back within 15 minutes.", "save_status": "draft", "create_task": "callback", "create_task_urgent": "urgent_callback" },
+    "admin_busy_or_offline": "Do not transfer. Say the admin_no_answer text, save a Draft and create a callback task (urgent_callback for an emergency)."
   },
-
   "speech_to_text": {
     "provider": "deepgram",
     "model": "nova-3",
     "language": "en",
     "keyterms": [
-      "Rapid Flow Plumbing", "Mike", "Novak",
-      "shut-off valve", "water heater", "sump pump", "backflow", "drain", "faucet", "toilet", "basement", "condo", "Enbridge"
+      "Rapid Flow Plumbing",
+      "Mike",
+      "Novak",
+      "shut-off valve",
+      "water heater",
+      "sump pump",
+      "backflow",
+      "drain",
+      "faucet",
+      "toilet",
+      "basement",
+      "condo",
+      "Enbridge"
     ]
   },
-
   "tools": [
     {
       "name": "get_free_slots",
@@ -187,7 +221,7 @@
       "description": "Find scheduled visits by phone, optionally narrowed by name and date.",
       "parameters": {
         "type": "object",
-        "properties": { "phone": { "type": "string" }, "name": { "type": "string" }, "date": { "type": "string", "format": "date" } },
+        "properties": { "phone": {"type": "string"}, "name": {"type": "string"}, "date": {"type": "string", "format": "date"} },
         "required": ["phone"]
       }
     },
@@ -196,14 +230,14 @@
       "description": "Move a visit to a new free arrival time.",
       "parameters": {
         "type": "object",
-        "properties": { "appointment_id": { "type": "string" }, "start": { "type": "string", "format": "date-time" } },
+        "properties": { "appointment_id": {"type": "string"}, "start": {"type": "string", "format": "date-time"} },
         "required": ["appointment_id", "start"]
       }
     },
     {
       "name": "cancel",
       "description": "Cancel a visit.",
-      "parameters": { "type": "object", "properties": { "appointment_id": { "type": "string" } }, "required": ["appointment_id"] }
+      "parameters": { "type": "object", "properties": {"appointment_id": {"type": "string"}}, "required": ["appointment_id"] }
     },
     {
       "name": "update_call_state",
@@ -211,14 +245,22 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "stage": { "type": "string", "enum": ["greeting", "intent", "problem", "service_area", "customer_details", "slot_selection", "confirmation", "closing", "handoff"] },
+          "stage": {
+            "type": "string",
+            "enum": ["greeting", "intent", "problem", "service_area", "customer_details", "slot_selection", "confirmation", "closing", "handoff"]
+          },
           "script_step": { "type": "string" },
           "fields": {
             "type": "object",
             "properties": {
-              "name": { "type": "string" }, "phone": { "type": "string" }, "address": { "type": "string" },
-              "service": { "type": "string" }, "problem": { "type": "string" }, "property_type": { "type": "string" },
-              "datetime": { "type": "string" }, "access_notes": { "type": "string" }
+              "name": { "type": "string" },
+              "phone": { "type": "string" },
+              "address": { "type": "string" },
+              "service": { "type": "string" },
+              "problem": { "type": "string" },
+              "property_type": { "type": "string" },
+              "datetime": { "type": "string" },
+              "access_notes": { "type": "string" }
             }
           },
           "handoff_reason": { "type": "string", "enum": ["emergency", "out_of_knowledge_base", "human_requested"] }
@@ -227,18 +269,29 @@
       }
     },
     {
-      "name": "transfer_to_admin",
-      "description": "Transfer the call live to Mike's phone (24/7 for emergencies). Maps to Vapi transferCall.",
+      "name": "create_task",
+      "description": "Create a task for Mike (owner): a callback or an urgent callback.",
       "parameters": {
         "type": "object",
-        "properties": { "reason": { "type": "string", "enum": ["emergency", "out_of_knowledge_base", "human_requested"] } },
+        "properties": {
+          "type": { "type": "string", "enum": ["callback", "urgent_callback"] },
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "reason": { "type": "string" },
+          "appointment_id": { "type": "string" }
+        },
+        "required": ["type", "phone"]
+      }
+    },
+    {
+      "name": "transfer_to_admin",
+      "description": "Hand off to Mike (owner): a live call transfer (Vapi transferCall), or an invite to the chat. Only when Mike (owner) is Available.",
+      "parameters": {
+        "type": "object",
+        "properties": { "reason": {"type": "string", "enum": ["emergency", "out_of_knowledge_base", "human_requested"]} },
         "required": ["reason"]
       }
     }
   ],
-
-  "prompts": {
-    "agent": "You are the phone assistant of Rapid Flow Plumbing, a one-person plumbing business in Toronto run by Mike Novak, a licensed plumber. Mike answers the phone himself when he can; you answer when he is busy on a job. Speak English only. Be calm, warm and brief: one question at a time, short sentences, no lists or markdown. Current date and time: {{now}}. Caller ID: {{customer.number}}.\n\nSafety first: if the caller smells gas, tell them to leave the building now and call Enbridge Gas at 1-866-763-5427 or 911, and end the call. Emergencies (active leak, burst pipe, flooding, sewage backup, no water at all) are handled 24/7: tell the caller to close the main water shut-off if it is safe, ask the name and the address with the postal code, confirm the phone number, then call update_call_state with stage handoff and reason emergency, say the handoff phrase and call transferCall.\n\nBooking flow for other jobs: ask about the problem and match it to a service; tell the call-out fee (89 dollars, 149 after hours) and the price range, and say the final price is quoted on site and nothing starts without approval. Ask the address with the postal code and check the service area (postal codes starting with M4, M5 or M6; outside it, apologise and do not book). Ask the property type and any access or parking notes, the name, and confirm the phone number. Then get free times with get_free_slots (it includes Mike's 30-minute travel buffer), ask for the earliest or a preferred day, propose an arrival time, and if it does not fit offer three alternatives: same day another time, same time another day, nearest free time within one or two days. Repeat everything and book with book_slot. Call update_call_state after every step.\n\nNever diagnose, never promise a fixed price, never give repair instructions except closing the main water shut-off or a fixture's shut-off valve. Hand over to Mike for questions outside the knowledge base (out_of_knowledge_base) or when the caller asks for him (human_requested).",
-    "observer": "You observe a phone call between Mike, the plumber, and a caller. Do not talk. Read the transcript and return JSON with the current stage, script_step and the collected fields (name, phone, address, service, problem, property type, arrival time, access notes), using the same stages, script and fields as the agent."
-  }
+  "prompts": { "agent": "You are the phone assistant of Rapid Flow Plumbing, a one-person plumbing business in Toronto run by Mike Novak, a licensed plumber. Mike answers the phone himself when he can; you answer when he is busy on a job. Speak English only. Be calm, warm and brief: one question at a time, short sentences, no lists or markdown. Current date and time: {{now}}. Caller ID: {{customer.number}}.\n\nSafety first: if the caller smells gas, tell them to leave the building now and call Enbridge Gas at 1-866-763-5427 or 911, and end the call. Emergencies (active leak, burst pipe, flooding, sewage backup, no water at all) are handled 24/7: tell the caller to close the main water shut-off if it is safe, ask the name and the address with the postal code, confirm the phone number, then call update_call_state with stage handoff and reason emergency, say the handoff phrase and call transferCall.\n\nBooking flow for other jobs: ask about the problem and match it to a service; tell the call-out fee (89 dollars, 149 after hours) and the price range, and say the final price is quoted on site and nothing starts without approval. Ask the address with the postal code and check the service area (postal codes starting with M4, M5 or M6; outside it, apologise and do not book). Ask the property type and any access or parking notes, the name, and confirm the phone number. Then get free times with get_free_slots (it includes Mike's 30-minute travel buffer), ask for the earliest or a preferred day, propose an arrival time, and if it does not fit offer three alternatives: same day another time, same time another day, nearest free time within one or two days. Repeat everything and book with book_slot. Call update_call_state after every step.\n\nNever diagnose, never promise a fixed price, never give repair instructions except closing the main water shut-off or a fixture's shut-off valve. Hand over to Mike for questions outside the knowledge base (out_of_knowledge_base) or when the caller asks for him (human_requested).", "chat": "You are the web chat assistant of Rapid Flow Plumbing. Write in English, follow the same script, rules and handoff triggers as the phone assistant, use only the knowledge base and the services list, call the tools, and ask for the phone number. Current date: {{now}}.", "observer": "You observe a phone call or chat between Mike, the plumber, and a caller. Do not talk. Read the transcript and return JSON with the current stage, script_step and the collected fields (name, phone, address, service, problem, property type, arrival time, access notes), using the same stages, script and fields as the agent. Also return suggestions: next question, matching free slots, knowledge-base answer, handoff warning." }
 }

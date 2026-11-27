@@ -3,53 +3,104 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dental Call Desk</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta name="theme-color" content="#07565b">
+  <title>Call Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;560;650;700;760&display=swap">
+  <link rel="stylesheet" href="app.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="logo">BS</span><span id="clinicName">Clinic</span></div>
-    <nav class="tabs" id="tabs">
-      <button data-view="calls" class="active">Calls</button>
-      <button data-view="schedule">Schedule</button>
-      <button data-view="appointments">Appointments</button>
-      <button data-view="history">History</button>
-      <button data-view="settings">AI Settings</button>
-    </nav>
-    <div class="mode">
-      <label for="modeSelect">Mode</label>
-      <select id="modeSelect">
-        <option value="replay">Replay</option>
-        <option value="live">Live</option>
-      </select>
-      <span id="liveStatus" class="pill"></span>
+    <button class="btn ghost menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+    <div class="brand">
+      <span class="logo" id="logo">BS</span>
+      <div>
+        <div class="brand-name" id="clinicName">Clinic</div>
+        <div class="brand-sub">AI call &amp; chat desk</div>
+      </div>
+    </div>
+    <span class="spacer"></span>
+    <div class="top-actions">
+      <label class="compact-label" id="bizWrap"><span>Business</span><select id="bizSelect"></select></label>
+      <label class="compact-label"><span>Administrator</span>
+        <select id="availSelect">
+          <option value="available">Available</option>
+          <option value="busy">Busy</option>
+          <option value="offline">Offline</option>
+        </select>
+      </label>
+      <div class="roles" id="modeSwitch" role="group" aria-label="Data source">
+        <button data-mode="replay" class="active">Replay</button>
+        <button data-mode="live">Live</button>
+      </div>
+      <span id="liveStatus" class="badge hidden"></span>
     </div>
   </header>
 
-  <div id="replayBar" class="replaybar">
-    <span class="muted">Replay a scripted call:</span>
-    <button data-scenario="uc1">UC1 · AI books</button>
-    <button data-scenario="uc2">UC2 · Admin answers</button>
-    <button data-scenario="uc3">UC3 · Handoff</button>
-    <button data-scenario="uc3noanswer">UC3 · Admin not available</button>
-    <label>Speed
-      <select id="speedSelect">
-        <option value="1">1×</option>
-        <option value="2" selected>2×</option>
-        <option value="4">4×</option>
-      </select>
-    </label>
-    <button id="stopReplay" class="ghost">Stop</button>
-  </div>
+  <div class="shell">
+    <aside class="side" id="side">
+      <div class="side-group">
+        <h4>AI operations</h4>
+        <a href="#/live" data-view="live"><svg class="i"><use href="#i-wave"/></svg>Live conversation<span class="count hidden" id="cntLive"></span></a>
+        <a href="#/conversations" data-view="conversations"><svg class="i"><use href="#i-chat"/></svg>Conversations</a>
+        <a href="#/tasks" data-view="tasks"><svg class="i"><use href="#i-check"/></svg>Tasks<span class="count hidden" id="cntTasks"></span></a>
+      </div>
+      <div class="side-group">
+        <h4 id="grpPractice">Clinic</h4>
+        <a href="#/appointments" data-view="appointments"><svg class="i"><use href="#i-list"/></svg><span id="navBookings">Appointments</span></a>
+        <a href="#/schedule" data-view="schedule"><svg class="i"><use href="#i-cal"/></svg>Schedule</a>
+      </div>
+      <div class="side-group">
+        <h4>Configuration</h4>
+        <a href="#/assistant" data-view="assistant"><svg class="i"><use href="#i-spark"/></svg>AI assistant</a>
+        <a href="#/data" data-view="data"><svg class="i"><use href="#i-db"/></svg><span id="navData">Clinic data</span></a>
+      </div>
+      <div class="side-group" id="demoLinks">
+        <h4>Demo</h4>
+        <a href="caller.html" target="_blank" id="callerLink"><svg class="i"><use href="#i-phone"/></svg>Fake caller</a>
+        <a href="chat.html" target="_blank" id="chatLink"><svg class="i"><use href="#i-chat"/></svg>Web chat</a>
+      </div>
+      <div class="side-foot"><span class="avatar" id="avatar">AD</span><div><div id="adminName">Administrator</div><div class="small" id="availText">Available</div></div></div>
+    </aside>
 
-  <div id="incoming" class="incoming hidden"></div>
-  <main id="view"></main>
+    <main class="main">
+      <div id="replayBar" class="replaybar">
+        <span class="label"><svg class="i"><use href="#i-play"/></svg>Replay a scenario</span>
+        <span id="scenarioButtons"></span>
+        <span class="grow"></span>
+        <label class="compact-label" style="color:inherit">Speed
+          <select id="speedSelect"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select>
+        </label>
+        <button id="stopReplay" class="btn sm">Stop</button>
+      </div>
+      <div id="incoming" class="incoming hidden"></div>
+      <div id="view"></div>
+    </main>
+  </div>
   <div id="toast" class="toast hidden"></div>
 
-  <audio id="remoteAudio" autoplay></audio>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12h3l3-8 4 16 3-8h7"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8Z"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8Z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17h.01"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19V5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2Zm0 0a2 2 0 0 0 2 2h14"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  </svg>
+
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="app.js"></script>
+  <script src="data.js"></script>
   <script src="replay.js"></script>
 </body>
 </html>

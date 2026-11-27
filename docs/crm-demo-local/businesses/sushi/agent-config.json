@@ -1,27 +1,31 @@
 {
   "version": 1,
-  "labels": {
-    "business": "Restaurant",
-    "resource": "Courier / table",
-    "resources": "Couriers, pickup counter and tables",
-    "customer": "Guest",
-    "booking": "Order",
-    "bookings": "Orders and reservations",
-    "admin": "Manager",
-    "logo": "US",
-    "resource_field": "assigned_to",
-    "closed": "The restaurant is closed on this day."
+  "labels": { "business": "Restaurant", "resource": "Courier / table", "resources": "Couriers, pickup counter and tables", "customer": "Guest", "booking": "Order", "bookings": "Orders and reservations", "admin": "Manager", "logo": "US", "resource_field": "assigned_to", "closed": "The restaurant is closed on this day." },
+  "business": { "name": "Umi Sushi & Roll", "type": "restaurant", "language": "en", "timezone": "America/Toronto", "currency": "CAD", "admin_ring_timeout_sec": 5, "address": "450 Queen Street West, Toronto, Ontario M5V 2A8", "chat_timeout_sec": 30 },
+  "settings": {
+    "operation_mode": "overflow",
+    "operation_modes": [
+      { "id": "copilot", "label": "Copilot", "call": "Ring Manager; Manager talks and the AI only assists (UC2). No answer within the ring timeout: the AI takes a message (name, phone, reason), saves a Draft and creates a callback task. It does not book.", "chat": "Manager replies; the AI shows intake and suggestions. No reply within the chat timeout: the AI takes a message as for calls." },
+      { "id": "overflow", "label": "Overflow", "call": "Manager Available: ring for the ring timeout, then the AI answers. Busy or Offline: the AI answers at once.", "chat": "Manager Available: wait the chat timeout, then the AI replies. Busy or Offline: the AI replies at once." },
+      { "id": "autonomous", "label": "Autonomous", "call": "The AI answers every call at once.", "chat": "The AI replies to every chat at once." }
+    ],
+    "admin_availability": "available",
+    "admin_availability_values": [
+      { "id": "available", "label": "Available" },
+      { "id": "busy", "label": "Busy", "meaning": "The AI answers at once in Overflow mode; a handoff creates a callback task instead of a live transfer" },
+      { "id": "offline", "label": "Offline", "meaning": "Same as Busy" }
+    ],
+    "notifications": {
+      "channel": "off",
+      "channels": ["off", "sms", "email"],
+      "events": {
+        "booked": { "enabled": false, "template": "Hi {name}, your order with {clinic.name} is booked: {service}, {date} at {time}." },
+        "rescheduled": { "enabled": false, "template": "Hi {name}, your order with {clinic.name} is moved to {date} at {time}." },
+        "cancelled": { "enabled": false, "template": "Hi {name}, your order with {clinic.name} on {date} at {time} is cancelled." },
+        "reminder": { "enabled": false, "hours_before": 24, "template": "Reminder: {name}, your order with {clinic.name} is on {date} at {time}." }
+      }
+    }
   },
-  "business": {
-    "name": "Umi Sushi & Roll",
-    "type": "restaurant",
-    "language": "en",
-    "timezone": "America/Toronto",
-    "currency": "CAD",
-    "admin_ring_timeout_sec": 5,
-    "address": "450 Queen Street West, Toronto, Ontario M5V 2A8"
-  },
-
   "knowledge_base": {
     "faq": [
       { "q": "Where is the restaurant?", "a": "450 Queen Street West, Toronto, near Spadina Avenue." },
@@ -42,31 +46,28 @@
       { "id": "rainbow_roll", "name": "Rainbow Roll (8 pcs)", "category": "Rolls", "price": 17.95, "description": "California roll topped with tuna, salmon and white fish" },
       { "id": "avocado_roll", "name": "Avocado Roll (6 pcs)", "category": "Rolls", "price": 7.95, "description": "Vegetarian" },
       { "id": "veg_tempura_roll", "name": "Vegetable Tempura Roll (8 pcs)", "category": "Rolls", "price": 10.95, "description": "Vegetarian, contains wheat" },
-      { "id": "salmon_sashimi", "name": "Salmon Sashimi (8 pcs)", "category": "Sashimi", "price": 18.50, "description": "Atlantic salmon" },
+      { "id": "salmon_sashimi", "name": "Salmon Sashimi (8 pcs)", "category": "Sashimi", "price": 18.5, "description": "Atlantic salmon" },
       { "id": "nigiri_set", "name": "Nigiri Set (10 pcs)", "category": "Sets", "price": 24.95, "description": "Chef's choice of nigiri" },
-      { "id": "party_platter", "name": "Party Platter (48 pcs)", "category": "Sets", "price": 79.00, "description": "Assorted rolls for 4 to 6 people" },
-      { "id": "miso_soup", "name": "Miso Soup", "category": "Sides", "price": 3.50, "description": "Tofu, seaweed, green onion" },
+      { "id": "party_platter", "name": "Party Platter (48 pcs)", "category": "Sets", "price": 79.0, "description": "Assorted rolls for 4 to 6 people" },
+      { "id": "miso_soup", "name": "Miso Soup", "category": "Sides", "price": 3.5, "description": "Tofu, seaweed, green onion" },
       { "id": "edamame", "name": "Edamame", "category": "Sides", "price": 5.95, "description": "Vegetarian, sea salt" },
-      { "id": "seaweed_salad", "name": "Seaweed Salad", "category": "Sides", "price": 6.50, "description": "Vegetarian, sesame" },
+      { "id": "seaweed_salad", "name": "Seaweed Salad", "category": "Sides", "price": 6.5, "description": "Vegetarian, sesame" },
       { "id": "mochi", "name": "Mochi Ice Cream (3 pcs)", "category": "Desserts", "price": 6.95, "description": "Green tea, mango, strawberry" }
     ],
     "files": []
   },
-
   "service_area": {
     "description": "Delivery within about 5 km of the restaurant (downtown west).",
     "postal_prefixes": ["M5V", "M5T", "M5H", "M5J", "M6J", "M6K", "M6G"]
   },
-
   "services": [
     { "id": "delivery_order", "name": "Delivery order", "urgent": false, "price_min": 0, "price_max": 4.99, "price_note": "Delivery fee; free over CAD 50", "duration_min": 45, "speciality": "delivery" },
     { "id": "pickup_order", "name": "Pickup order", "urgent": false, "price_min": 0, "price_max": 0, "price_note": "No fee", "duration_min": 15, "speciality": "pickup" },
     { "id": "table_reservation", "name": "Table reservation", "urgent": false, "price_min": 0, "price_max": 0, "price_note": "No deposit for up to 6 guests", "duration_min": 90, "speciality": "dine_in" }
   ],
-
   "appointment_fields": [
     { "id": "name", "label": "Guest name", "required": true },
-    { "id": "phone", "label": "Phone", "required": true, "note": "Auto-detected from caller ID; the caller confirms it" },
+    { "id": "phone", "label": "Phone", "required": true, "note": "Calls: auto-detected from caller ID, the caller confirms it. Chat: asked" },
     { "id": "service", "label": "Order type", "required": true, "values": ["delivery_order", "pickup_order", "table_reservation"] },
     { "id": "items", "label": "Order items", "required": false, "note": "Required for delivery and pickup: items with quantities" },
     { "id": "address", "label": "Delivery address", "required": false, "note": "Required for delivery; must be inside the delivery area" },
@@ -76,7 +77,6 @@
     { "id": "notes", "label": "Allergies and notes", "required": false },
     { "id": "assigned_to", "label": "Courier / table", "required": false, "note": "Assigned automatically" }
   ],
-
   "appointment_statuses": [
     { "id": "draft", "label": "Draft", "meaning": "Data is still being collected, or the call ended before the order was placed" },
     { "id": "filled", "label": "Confirmed", "meaning": "The order or reservation is placed and the slot is booked" },
@@ -84,7 +84,16 @@
     { "id": "cancelled", "label": "Cancelled", "meaning": "The order or reservation was cancelled" },
     { "id": "missed", "label": "No-show", "meaning": "The pickup was not collected or the guests did not come; set by the manager" }
   ],
-
+  "task_types": [
+    { "id": "callback", "label": "Callback", "created_when": "A handoff was not picked up, the administrator is Busy or Offline during a handoff, or Copilot mode took a message" },
+    { "id": "urgent_callback", "label": "Urgent callback", "created_when": "An urgent case could not be transferred; shown first in the list" }
+  ],
+  "task_statuses": [
+    { "id": "pending", "label": "Pending", "set_by": "System (on creation)" },
+    { "id": "acknowledged", "label": "Acknowledged", "set_by": "Administrator (working on it)" },
+    { "id": "resolved", "label": "Resolved", "set_by": "Administrator (done)" },
+    { "id": "declined", "label": "Declined", "set_by": "Administrator (not needed)" }
+  ],
   "funnel_stages": [
     { "id": "greeting", "label": "Greeting" },
     { "id": "intent", "label": "Order type" },
@@ -96,28 +105,54 @@
     { "id": "closing", "label": "Closing" },
     { "id": "handoff", "label": "Handoff to manager" }
   ],
-
   "script": [
     { "step": "greet", "stage": "greeting", "say": "Hello, thank you for calling Umi Sushi and Roll. Would you like to order for delivery, for pickup, or book a table?" },
-    { "step": "ask_intent", "stage": "intent", "collects": ["service"], "goal": "Find out if the caller wants delivery, pickup, a table, to change or cancel an order, or has a question" },
-
-    { "step": "take_items", "stage": "order", "collects": ["items"], "say": "What would you like to order?", "goal": "Take items and quantities from the menu, repeat them back with the subtotal" },
+    {
+      "step": "ask_intent",
+      "stage": "intent",
+      "collects": ["service"],
+      "goal": "Find out if the caller wants delivery, pickup, a table, to change or cancel an order, or has a question"
+    },
+    {
+      "step": "take_items",
+      "stage": "order",
+      "collects": ["items"],
+      "say": "What would you like to order?",
+      "goal": "Take items and quantities from the menu, repeat them back with the subtotal"
+    },
     { "step": "upsell", "stage": "order", "say": "Would you like to add miso soup or edamame?" },
-
-    { "step": "ask_address", "stage": "order_details", "collects": ["address"], "say": "What is the delivery address, including the apartment number and postal code?" },
+    {
+      "step": "ask_address",
+      "stage": "order_details",
+      "collects": ["address"],
+      "say": "What is the delivery address, including the apartment number and postal code?"
+    },
     { "step": "ask_party_size", "stage": "order_details", "collects": ["party_size"], "say": "How many guests will there be?" },
-    { "step": "ask_allergies", "stage": "order_details", "collects": ["notes"], "say": "Does anyone have food allergies, or is there anything else we should know?" },
-
+    {
+      "step": "ask_allergies",
+      "stage": "order_details",
+      "collects": ["notes"],
+      "say": "Does anyone have food allergies, or is there anything else we should know?"
+    },
     { "step": "ask_name", "stage": "customer_details", "collects": ["name"], "say": "May I have your name, please?" },
-    { "step": "confirm_phone", "stage": "customer_details", "collects": ["phone"], "say": "Is {caller_phone} the best number to reach you?" },
+    {
+      "step": "confirm_phone",
+      "stage": "customer_details",
+      "collects": ["phone"],
+      "say": "Is {caller_phone} the best number to reach you?",
+      "chat_say": "What is the best phone number to reach you?"
+    },
     { "step": "ask_payment", "stage": "customer_details", "collects": ["payment"], "say": "Will you pay by card or cash at the door?" },
-
-    { "step": "ask_time", "stage": "slot_selection", "collects": ["datetime"], "say": "Would you like it as soon as possible, or at a specific time?", "goal": "Propose the nearest free slot or the requested time; if it does not fit, offer three alternatives per rules.slot_selection" },
-
+    {
+      "step": "ask_time",
+      "stage": "slot_selection",
+      "collects": ["datetime"],
+      "say": "Would you like it as soon as possible, or at a specific time?",
+      "goal": "Propose the nearest free slot or the requested time; if it does not fit, offer three alternatives per rules.slot_selection"
+    },
     { "step": "confirm", "stage": "confirmation", "goal": "Repeat order type, items, address or number of guests, time, name and payment; place the order" },
     { "step": "close", "stage": "closing", "say": "Thank you, your order is confirmed. Enjoy your meal!" }
   ],
-
   "rules": {
     "menu_only": "Offer only items from the menu with their exact prices. Never invent dishes, discounts or delivery times.",
     "allergies": "Always ask about allergies. Note every allergy for the kitchen, and say that the kitchen cannot guarantee an allergen-free meal. Never say a dish is safe for an allergy.",
@@ -129,10 +164,13 @@
       "Propose the nearest free slot, or the requested time if it is free.",
       "If the time does not fit, propose three alternatives: the same day at another time; the same time on another day; the nearest free slot."
     ],
-    "booking": "Place the order or reservation yourself once all required fields are collected. Do not send an SMS confirmation.",
-    "state_updates": "Call update_call_state after every script step."
+    "booking": "Place the order or reservation yourself once all required fields are collected. No approval is needed. Slots are not held during the conversation; if the slot was taken in the meantime, offer the alternatives from rules.slot_selection.",
+    "state_updates": "Call update_call_state after every script step.",
+    "notifications": "Confirmation and reminder messages are sent by the system only when settings.notifications has the channel on and the event enabled. Tell the caller about a message only in that case.",
+    "copilot_message": "In Copilot mode, when nobody answered: take a message (name, phone, reason), call create_task with type callback, and do not book.",
+    "chat": "In the chat, follow the same script, rules and tools. Ask for the phone number. A handoff invites Manager into the chat; if nobody joins within business.chat_timeout_sec, create a callback task.",
+    "tasks": "Call create_task when someone must act after the conversation: callback or urgent_callback (see task_types)."
   },
-
   "handoff": {
     "triggers": [
       { "id": "out_of_knowledge_base", "description": "The question is not covered by the knowledge base or the menu" },
@@ -146,22 +184,29 @@
       "Transfer the call even if the phone number was not obtained."
     ],
     "say_before_transfer": "I'll connect you with our manager now, so they can take care of this personally. Please stay on the line.",
-    "admin_no_answer": {
-      "say": "I'm sorry, our manager can't pick up right now. I've saved your details and they will call you back within 15 minutes.",
-      "save_status": "draft"
-    }
+    "admin_no_answer": { "say": "I'm sorry, our manager can't pick up right now. I've saved your details and they will call you back within 15 minutes.", "save_status": "draft", "create_task": "callback", "create_task_urgent": "urgent_callback" },
+    "admin_busy_or_offline": "Do not transfer. Say the admin_no_answer text, save a Draft and create a callback task (urgent_callback for an emergency)."
   },
-
   "speech_to_text": {
     "provider": "deepgram",
     "model": "nova-3",
     "language": "en",
     "keyterms": [
-      "Umi Sushi", "sashimi", "nigiri", "edamame", "miso", "mochi", "tempura",
-      "California roll", "Dragon roll", "Rainbow roll", "spicy tuna", "Queen Street", "Spadina"
+      "Umi Sushi",
+      "sashimi",
+      "nigiri",
+      "edamame",
+      "miso",
+      "mochi",
+      "tempura",
+      "California roll",
+      "Dragon roll",
+      "Rainbow roll",
+      "spicy tuna",
+      "Queen Street",
+      "Spadina"
     ]
   },
-
   "tools": [
     {
       "name": "get_free_slots",
@@ -202,7 +247,7 @@
       "description": "Find today's and upcoming orders and reservations by phone, optionally narrowed by name and date.",
       "parameters": {
         "type": "object",
-        "properties": { "phone": { "type": "string" }, "name": { "type": "string" }, "date": { "type": "string", "format": "date" } },
+        "properties": { "phone": {"type": "string"}, "name": {"type": "string"}, "date": {"type": "string", "format": "date"} },
         "required": ["phone"]
       }
     },
@@ -211,14 +256,14 @@
       "description": "Move an order or reservation to a new free slot.",
       "parameters": {
         "type": "object",
-        "properties": { "appointment_id": { "type": "string" }, "start": { "type": "string", "format": "date-time" } },
+        "properties": { "appointment_id": {"type": "string"}, "start": {"type": "string", "format": "date-time"} },
         "required": ["appointment_id", "start"]
       }
     },
     {
       "name": "cancel",
       "description": "Cancel an order or reservation. Orders already being prepared or delivered cannot be cancelled: hand over to the manager.",
-      "parameters": { "type": "object", "properties": { "appointment_id": { "type": "string" } }, "required": ["appointment_id"] }
+      "parameters": { "type": "object", "properties": {"appointment_id": {"type": "string"}}, "required": ["appointment_id"] }
     },
     {
       "name": "update_call_state",
@@ -226,14 +271,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "stage": { "type": "string", "enum": ["greeting", "intent", "order", "order_details", "customer_details", "slot_selection", "confirmation", "closing", "handoff"] },
+          "stage": {
+            "type": "string",
+            "enum": ["greeting", "intent", "order", "order_details", "customer_details", "slot_selection", "confirmation", "closing", "handoff"]
+          },
           "script_step": { "type": "string" },
           "fields": {
             "type": "object",
             "properties": {
-              "name": { "type": "string" }, "phone": { "type": "string" }, "service": { "type": "string" },
-              "items": { "type": "string" }, "address": { "type": "string" }, "party_size": { "type": "string" },
-              "datetime": { "type": "string" }, "payment": { "type": "string" }, "notes": { "type": "string" }
+              "name": { "type": "string" },
+              "phone": { "type": "string" },
+              "service": { "type": "string" },
+              "items": { "type": "string" },
+              "address": { "type": "string" },
+              "party_size": { "type": "string" },
+              "datetime": { "type": "string" },
+              "payment": { "type": "string" },
+              "notes": { "type": "string" }
             }
           },
           "handoff_reason": { "type": "string", "enum": ["out_of_knowledge_base", "order_complaint", "catering_request", "human_requested"] }
@@ -242,18 +296,29 @@
       }
     },
     {
-      "name": "transfer_to_admin",
-      "description": "Transfer the call live to the manager. Maps to Vapi transferCall.",
+      "name": "create_task",
+      "description": "Create a task for Manager: a callback or an urgent callback.",
       "parameters": {
         "type": "object",
-        "properties": { "reason": { "type": "string", "enum": ["out_of_knowledge_base", "order_complaint", "catering_request", "human_requested"] } },
+        "properties": {
+          "type": { "type": "string", "enum": ["callback", "urgent_callback"] },
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "reason": { "type": "string" },
+          "appointment_id": { "type": "string" }
+        },
+        "required": ["type", "phone"]
+      }
+    },
+    {
+      "name": "transfer_to_admin",
+      "description": "Hand off to Manager: a live call transfer (Vapi transferCall), or an invite to the chat. Only when Manager is Available.",
+      "parameters": {
+        "type": "object",
+        "properties": { "reason": {"type": "string", "enum": ["out_of_knowledge_base", "order_complaint", "catering_request", "human_requested"]} },
         "required": ["reason"]
       }
     }
   ],
-
-  "prompts": {
-    "agent": "You are the phone assistant of Umi Sushi & Roll, a sushi restaurant at 450 Queen Street West, Toronto. Speak English only. Be warm, brief and clear: one question at a time, short sentences, no lists or markdown. Current date and time: {{now}}. Caller ID: {{customer.number}}.\n\nYou take delivery orders, pickup orders and table reservations, and answer questions from the knowledge base and the menu.\n\nOrder flow: find out the order type; for delivery and pickup take the items with quantities and repeat them back with the subtotal; for delivery check the postal code against the delivery area (M5V, M5T, M5H, M5J, M6J, M6K, M6G) and the 25 dollar minimum, and tell the delivery fee (4.99, free over 50); for a table ask the number of guests (over 6 is a handoff). Always ask about allergies, note them, and say the kitchen cannot guarantee an allergen-free meal. Ask the name, confirm the phone number, ask card or cash for delivery. Then get free slots with get_free_slots, propose the nearest or requested time, and if it does not fit offer three alternatives: same day another time, same time another day, nearest free slot. Repeat everything and place the order with book_slot. Call update_call_state after every step with the stage, script step and collected fields.\n\nNever invent dishes, prices, discounts or delivery times. Never say a dish is safe for an allergy.\n\nHand the call to the manager (update_call_state with stage handoff and the reason, say the handoff phrase, then transferCall) for: a complaint about an order or a refund (order_complaint), a group over 6, an event or catering (catering_request), a question outside the knowledge base (out_of_knowledge_base), or when the caller asks for a person (human_requested). Before the transfer ask the name and confirm the phone number.",
-    "observer": "You observe a phone call between the restaurant manager and a caller. Do not talk. Read the transcript and return JSON with the current stage, script_step and the collected fields (order type, items, address, number of guests, time, name, phone, payment, allergies and notes), using the same stages, script and fields as the agent."
-  }
+  "prompts": { "agent": "You are the phone assistant of Umi Sushi & Roll, a sushi restaurant at 450 Queen Street West, Toronto. Speak English only. Be warm, brief and clear: one question at a time, short sentences, no lists or markdown. Current date and time: {{now}}. Caller ID: {{customer.number}}.\n\nYou take delivery orders, pickup orders and table reservations, and answer questions from the knowledge base and the menu.\n\nOrder flow: find out the order type; for delivery and pickup take the items with quantities and repeat them back with the subtotal; for delivery check the postal code against the delivery area (M5V, M5T, M5H, M5J, M6J, M6K, M6G) and the 25 dollar minimum, and tell the delivery fee (4.99, free over 50); for a table ask the number of guests (over 6 is a handoff). Always ask about allergies, note them, and say the kitchen cannot guarantee an allergen-free meal. Ask the name, confirm the phone number, ask card or cash for delivery. Then get free slots with get_free_slots, propose the nearest or requested time, and if it does not fit offer three alternatives: same day another time, same time another day, nearest free slot. Repeat everything and place the order with book_slot. Call update_call_state after every step with the stage, script step and collected fields.\n\nNever invent dishes, prices, discounts or delivery times. Never say a dish is safe for an allergy.\n\nHand the call to the manager (update_call_state with stage handoff and the reason, say the handoff phrase, then transferCall) for: a complaint about an order or a refund (order_complaint), a group over 6, an event or catering (catering_request), a question outside the knowledge base (out_of_knowledge_base), or when the caller asks for a person (human_requested). Before the transfer ask the name and confirm the phone number.", "chat": "You are the web chat assistant of Umi Sushi & Roll. Write in English, follow the same script, rules and handoff triggers as the phone assistant, use only the knowledge base and the services list, call the tools, and ask for the phone number. Current date: {{now}}.", "observer": "You observe a phone call or chat between the restaurant manager and a caller. Do not talk. Read the transcript and return JSON with the current stage, script_step and the collected fields (order type, items, address, number of guests, time, name, phone, payment, allergies and notes), using the same stages, script and fields as the agent. Also return suggestions: next question, matching free slots, knowledge-base answer, handoff warning." }
 }
