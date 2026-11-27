@@ -8,8 +8,8 @@
 //   transfer  { call_id }                 the AI hands the call over, ring the administrator again
 //   no-answer { call_id } -> { say }      the administrator missed the transfer: Draft, call back later
 //   end       { call_id }                 the call ended
-import { CORS, db, json, loadConfig, loadConfigForCall, normBiz, pinError, systemMessage } from "../_shared/common.ts";
-import { ensureDraft } from "../_shared/tools.ts";
+import { callBusiness, canHandOff, CORS, db, firstResponder, json, loadConfig, loadConfigForCall, loadSettings, normBiz, pinError, systemMessage } from "../_shared/common.ts";
+import { callbackTask, ensureDraft } from "../_shared/tools.ts";
 
 async function markEnded(callId: string, outcome?: string) {
   const { data: call } = await db.from("calls").select("status,outcome").eq("id", callId).single();
@@ -41,7 +41,13 @@ Deno.serve(async (req) => {
       }
       case "ai":
         await db.from("calls").update({ status: "active", mode: "ai" }).eq("id", callId);
-        await systemMessage(callId, `No answer in ${config.clinic.admin_ring_timeout_sec} s, the AI assistant answered`);
+        {
+          // The page declines the ring at once when the AI answers first (mode and availability).
+          const s = await loadSettings(await callBusiness(callId));
+          await systemMessage(callId, firstResponder(s) === "ai"
+            ? (s.operation_mode === "autonomous" ? "Autonomous mode: the AI assistant answered at once" : `Administrator is ${s.admin_availability}: the AI assistant answered at once`)
+            : `No answer in ${config.clinic.admin_ring_timeout_sec} s, the AI assistant answered` + (s.operation_mode === "copilot" ? " (Copilot: it takes a message)" : ""));
+        }
         return json({ ok: true });
       case "answered": {
         const { data } = await db.from("calls").select("mode").eq("id", callId).single();
@@ -56,8 +62,10 @@ Deno.serve(async (req) => {
         await systemMessage(callId, "Transferring the call to the administrator");
         return json({ ok: true });
       case "no-answer":
-        await systemMessage(callId, "The administrator did not pick up");
+        await systemMessage(callId, canHandOff(await loadSettings(await callBusiness(callId)))
+          ? "The administrator did not pick up" : "The administrator is busy or offline: no live transfer");
         await ensureDraft(callId);
+        await callbackTask(callId);
         await markEnded(callId, "callback");
         return json({ say: config.handoff.admin_no_answer.say });
       case "end":

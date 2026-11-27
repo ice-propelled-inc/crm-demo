@@ -25,3 +25,10 @@ verify_jwt = true
 
 [functions.observe]
 verify_jwt = true
+
+[functions.admin]
+verify_jwt = true
+
+# Web chat: called by the visitor's chat page with the anon key (no admin PIN).
+[functions.chat]
+verify_jwt = true

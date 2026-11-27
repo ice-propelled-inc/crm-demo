@@ -14,7 +14,7 @@ export const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_K
 
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-admin-pin",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-admin-pin, x-client-info",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -44,12 +44,12 @@ export async function callBusiness(callId?: string | null): Promise<string> {
   return normBiz(data?.business);
 }
 
-// agent-config.json and schedule.json are read from the published page, so the repo stays the single source.
+// Clinic data: the business_data row edited on the page; without a row, the seed files published with the page.
 const cache = new Map<string, { at: number; config: any; schedule: any }>();
-export async function loadConfig(business = "dental"): Promise<{ config: any; schedule: any }> {
+export function dropConfigCache(business: string) { cache.delete(normBiz(business)); }
+
+export async function seedConfig(business = "dental"): Promise<{ config: any; schedule: any }> {
   const biz = normBiz(business);
-  const hit = cache.get(biz);
-  if (hit && Date.now() - hit.at < 60_000) return hit;
   const base = env("PAGES_BASE_URL").replace(/\/$/, "");
   const sets = (Deno.env.get("BUSINESSES_PATH") || "crm-demo-local/businesses").replace(/^\/|\/$/g, "");
   const dir = biz === "dental" ? base : `${base}/${sets}/${biz}`;
@@ -59,6 +59,15 @@ export async function loadConfig(business = "dental"): Promise<{ config: any; sc
     return r.json();
   };
   const [config, schedule] = await Promise.all([get("agent-config.json"), get("schedule.json")]);
+  return { config, schedule };
+}
+
+export async function loadConfig(business = "dental"): Promise<{ config: any; schedule: any }> {
+  const biz = normBiz(business);
+  const hit = cache.get(biz);
+  if (hit && Date.now() - hit.at < 15_000) return hit;
+  const { data: row } = await db.from("business_data").select("config,schedule").eq("business", biz).maybeSingle();
+  const { config, schedule } = row ?? await seedConfig(biz);
   // The other sets use generic key names; the code uses the dental ones.
   config.clinic = config.clinic || config.business;
   schedule.doctors = schedule.doctors || schedule.resources;
@@ -67,6 +76,29 @@ export async function loadConfig(business = "dental"): Promise<{ config: any; sc
   cache.set(biz, entry);
   return entry;
 }
+
+// Operation mode, administrator availability and notifications: business_settings row over agent-config.json "settings".
+export type Settings = { operation_mode: string; admin_availability: string; notifications: any };
+export async function loadSettings(business = "dental"): Promise<Settings> {
+  const biz = normBiz(business);
+  const { config } = await loadConfig(biz);
+  const d = config.settings || {};
+  const { data } = await db.from("business_settings").select("*").eq("business", biz).maybeSingle();
+  const notifications = { channel: "off", events: {}, ...(d.notifications || {}), ...(data?.notifications || {}) };
+  notifications.events = { ...(d.notifications?.events || {}), ...(data?.notifications?.events || {}) };
+  return {
+    operation_mode: data?.operation_mode || d.operation_mode || "overflow",
+    admin_availability: data?.admin_availability || d.admin_availability || "available",
+    notifications,
+  };
+}
+
+// Who takes a new call or chat first: "admin" (ring / wait for the administrator) or "ai" (the AI at once).
+export const firstResponder = (s: Settings) =>
+  s.operation_mode === "autonomous" || (s.operation_mode === "overflow" && s.admin_availability !== "available") ? "ai" : "admin";
+
+// A handoff can reach the administrator live only while Available.
+export const canHandOff = (s: Settings) => s.admin_availability === "available";
 
 export const loadConfigForCall = async (callId?: string | null) => loadConfig(await callBusiness(callId));
 

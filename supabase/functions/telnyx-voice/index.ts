@@ -8,8 +8,8 @@
 //   vapi-done       the Vapi leg ended without a transfer
 //   recording       recording of the administrator's call is ready
 // TeXML sends the same parameter names as TwiML (From, CallSid, DialCallStatus, RecordingUrl).
-import { db, env, loadConfig, systemMessage } from "../_shared/common.ts";
-import { ensureDraft } from "../_shared/tools.ts";
+import { canHandOff, db, env, firstResponder, loadConfig, loadSettings, systemMessage } from "../_shared/common.ts";
+import { callbackTask, ensureDraft } from "../_shared/tools.ts";
 
 const xmlEsc = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" }[c]!));
 const texml = (body: string) =>
@@ -44,6 +44,15 @@ async function markEnded(callId: string, outcome?: string) {
   await systemMessage(callId, "Call ended");
 }
 
+// Forward the call to the Vapi assistant over SIP (no answer, or the AI answers first).
+const toVapi = (callId: string) =>
+  `<Dial answerOnBridge="true" action="${step("vapi-done", callId)}" referUrl="${step("refer", callId)}">` +
+  `<Sip>${xmlEsc(env("VAPI_SIP_URI"))}</Sip></Dial>`;
+
+const aiFirstText = (s: { operation_mode: string; admin_availability: string }) => s.operation_mode === "autonomous"
+  ? "Autonomous mode: the AI assistant answered at once"
+  : `Administrator is ${s.admin_availability}: the AI assistant answered at once`;
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
   const raw = await req.text();
@@ -58,9 +67,16 @@ Deno.serve(async (req) => {
   switch (q.get("step") || "incoming") {
     case "incoming": {
       // twilio_call_sid holds the provider call id (here the TeXML CallSid).
-      const { data, error } = await db.from("calls")
-        .insert({ phone: p.From, twilio_call_sid: p.CallSid, status: "ringing", mode: "ringing" }).select("id").single();
+      const settings = await loadSettings();
+      const aiFirst = firstResponder(settings) === "ai";
+      const { data, error } = await db.from("calls").insert({
+        phone: p.From, twilio_call_sid: p.CallSid, status: aiFirst ? "active" : "ringing", mode: aiFirst ? "ai" : "ringing",
+      }).select("id").single();
       if (error) throw new Error(error.message);
+      if (aiFirst) {
+        await systemMessage(data.id, aiFirstText(settings));
+        return texml(toVapi(data.id));
+      }
       return texml(
         `<Dial timeout="${ring}" answerOnBridge="true" record="record-from-answer-dual" ` +
         `recordingStatusCallback="${step("recording", data.id)}" action="${step("after-admin", data.id)}">` +
@@ -74,14 +90,19 @@ Deno.serve(async (req) => {
         return texml("<Hangup/>");
       }
       await db.from("calls").update({ status: "active", mode: "ai" }).eq("id", callId);
-      await systemMessage(callId, `No answer in ${ring} s, the AI assistant answered`);
-      return texml(
-        `<Dial answerOnBridge="true" action="${step("vapi-done", callId)}" referUrl="${step("refer", callId)}">` +
-        `<Sip>${xmlEsc(env("VAPI_SIP_URI"))}</Sip></Dial>`,
-      );
+      const copilot = (await loadSettings()).operation_mode === "copilot";
+      await systemMessage(callId, `No answer in ${ring} s, the AI assistant answered` + (copilot ? " (Copilot: it takes a message)" : ""));
+      return texml(toVapi(callId));
     }
 
     case "refer": {
+      if (!canHandOff(await loadSettings())) {
+        await systemMessage(callId, "The administrator is busy or offline: no live transfer");
+        await ensureDraft(callId);
+        await callbackTask(callId);
+        await markEnded(callId, "callback");
+        return texml(`<Say voice="Polly.Joanna">${xmlEsc(config.handoff.admin_no_answer.say)}</Say><Hangup/>`);
+      }
       await db.from("calls").update({ mode: "transferring" }).eq("id", callId);
       return texml(
         `<Dial timeout="20" answerOnBridge="true" record="record-from-answer-dual" ` +
@@ -97,6 +118,7 @@ Deno.serve(async (req) => {
       }
       await systemMessage(callId, "The administrator did not pick up");
       await ensureDraft(callId);
+      await callbackTask(callId);
       await markEnded(callId, "callback");
       return texml(`<Say voice="Polly.Joanna">${xmlEsc(config.handoff.admin_no_answer.say)}</Say><Hangup/>`);
     }

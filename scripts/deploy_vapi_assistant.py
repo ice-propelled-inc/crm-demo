@@ -61,81 +61,42 @@ def load_env() -> dict[str, str]:
 
 
 def build_prompt(config: dict, schedule: dict) -> str:
-    clinic = config["clinic"]
-    tz = clinic["timezone"]
-    rules = config["rules"]
+    """Phone prompt of any business set. Same content as agentPrompt() in supabase/functions/_shared/prompt.ts,
+    which rebuilds it when the administrator saves clinic data on the page."""
+    info = config.get("clinic") or config["business"]
+    now = NOW.replace("TZ", info["timezone"])
+    labels = config.get("labels", {})
     handoff = config["handoff"]
+    rules = [r for v in config["rules"].values() for r in (v if isinstance(v, list) else [v])]
+    doctors = schedule.get("doctors") or schedule.get("resources") or []
+    intro = (config["prompts"]["agent"].replace("{clinic.name}", info["name"]).replace("{business.name}", info["name"])
+             .replace("{{now}}", now))
     lines = [
-        f"You are the phone assistant of {clinic['name']}, a dental clinic. Speak English only.",
+        intro,
         "Be warm, brief and clear: one question at a time, short sentences, no lists or markdown.",
-        f'Current date and time in the clinic: {{{{"now" | date: "%A, %B %d, %Y, %I:%M %p", "{tz}"}}}}.',
+        f"Current date and time: {now}.",
         "Caller phone number (caller ID): {{customer.number}}.",
         "",
         "## Rules",
-        f"- {rules['no_medical_advice']}",
-        f"- {rules['doctor_choice']}",
-        f"- {rules['booking']}",
-        f"- {rules['state_updates']} Pass the stage id, the script step id and all fields collected so far.",
-        "- Use only the knowledge base and the services list below. Never invent prices, doctors or slots.",
-        "- Always get slots from get_free_slots and book only slots it returned. Dates are YYYY-MM-DD, times HH:MM, clinic local time.",
+        *[f"- {r}" for r in rules],
+        "- Use only the knowledge base and the services list below. Never invent prices, names or slots.",
+        "- Always get slots from get_free_slots and book only slots it returned. Dates are YYYY-MM-DD, times HH:MM, local time.",
+        "- If a tool returns an error, follow what the error says.",
         "",
-        "## Slot selection",
-        *[f"{i}. {r}" for i, r in enumerate(rules["slot_selection"], 1)],
-        "Use get_free_slots with date for the same date, with time (and a later date) for the same time on another date,"
-        " and without both for the nearest slots.",
-        "",
-        "## Reschedule or cancel",
-        *[f"- {r}" for r in rules["appointment_lookup"]],
-        "Use find_appointments with the caller's phone number, then reschedule or cancel.",
-        "",
-        "## Handoff to the administrator",
-        "Hand the call over when:",
+        "## Handoff",
+        "Hand over when:",
         *[f"- {t['description']} (handoff_reason: {t['id']})" for t in handoff["triggers"]],
-        "For an urgent case:",
-        *[f"- {s}" for s in handoff["urgent_case_steps"]],
-        "Before the transfer, call update_call_state with stage handoff and the handoff_reason, then say:"
-        f' "{handoff["say_before_transfer"]}" and call transferCall.',
+        *[f"- {s}" for s in handoff.get("urgent_case_steps") or handoff.get("handoff_steps") or []],
+        f'Before the handoff, call update_call_state with stage handoff and the handoff_reason, then say: "{handoff["say_before_transfer"]}"',
+        "and call transferCall.",
+        *([f"If the handoff is not possible: {handoff['admin_busy_or_offline']}"] if handoff.get("admin_busy_or_offline") else []),
         "",
         "## Funnel stages (id: label)",
         *[f"- {s['id']}: {s['label']}" for s in config["funnel_stages"]],
         "",
         "## Script (step id / stage: what to say or do)",
-        *[f"- {s['step']} / {s['stage']}: {s.get('say') or s.get('goal')}" for s in config["script"]],
-        "",
-        "## Appointment fields (field id: label)",
-        *[
-            f"- {f['id']}: {f['label']}{' (required)' if f['required'] else ' (optional)'}"
-            + (f" - {f['note']}" if f.get("note") else "")
-            for f in config["appointment_fields"]
-        ],
-        "",
-        f"## Services (prices in {clinic['currency']})",
-        *[
-            f"- {s['id']}: {s['name']}, {s['price_min']}-{s['price_max']}, about {s['duration_min']} min,"
-            f" {s['speciality']}{', urgent' if s['urgent'] else ''}"
-            for s in config["services"]
-        ],
-        "",
-        "## Doctors",
-        *[f"- {d['id']}: {d['name']}, {d['speciality_label']} ({d['speciality']})" for d in schedule["doctors"]],
-        "",
-        "## Knowledge base",
-        *[f"Q: {f['q']}\nA: {f['a']}" for f in config["knowledge_base"]["faq"]],
-    ]
-    return "\n".join(lines)
-
-
-def business_prompt(config: dict) -> str:
-    """Prompt of a non-dental set: prompts.agent with the live date, plus the knowledge base, menu and services."""
-    biz = config["business"]
-    lines = [
-        config["prompts"]["agent"].replace("{{now}}", NOW.replace("TZ", biz["timezone"])),
-        "",
-        "## Funnel stages (id: label)",
-        *[f"- {s['id']}: {s['label']}" for s in config["funnel_stages"]],
-        "",
-        "## Script (step id / stage: what to say or do)",
-        *[f"- {s['step']} / {s['stage']}: {s.get('say') or s.get('goal')}" for s in config["script"]],
+        *[f"- {s['step']} / {s['stage']}{' (when ' + s['when'] + ')' if s.get('when') else ''}: {s.get('say') or s.get('goal')}"
+          for s in config["script"]],
         "",
         "## Fields for update_call_state and book_slot (field id: label)",
         *[
@@ -144,25 +105,22 @@ def business_prompt(config: dict) -> str:
             for f in config["appointment_fields"]
         ],
         "",
-        f"## Services (service_id: name, price in {biz['currency']}, duration)",
+        f"## Services (service_id: name, price in {info['currency']}, duration)",
         *[
             f"- {s['id']}: {s['name']}, {s['price_min']}-{s['price_max']}"
             + (f" ({s['price_note']})" if s.get("price_note") else "")
-            + f", about {s['duration_min']} min{', urgent' if s['urgent'] else ''}"
+            + f", about {s['duration_min']} min"
+            + (f", {s['speciality']}" if s.get("speciality") else "")
+            + (", urgent" if s["urgent"] else "")
             for s in config["services"]
         ],
         "",
-        "## Rules",
-        *[f"- {r}" for v in config["rules"].values() for r in (v if isinstance(v, list) else [v])],
-        "",
-        "## Handoff",
-        *[f"- {t['description']} (handoff_reason: {t['id']})" for t in config["handoff"]["triggers"]],
-        *[f"- {s}" for s in config["handoff"].get("handoff_steps", [])],
-        f'Before the transfer say: "{config["handoff"]["say_before_transfer"]}"',
+        f"## {labels.get('resources', 'Doctors')} ({labels.get('resource_field', 'doctor')} id: name, speciality)",
+        *[f"- {d['id']}: {d['name']}, {d.get('speciality_label', '')} ({d['speciality']})" for d in doctors],
     ]
     menu = config["knowledge_base"].get("menu")
     if menu:
-        lines += ["", f"## Menu (prices in {biz['currency']})",
+        lines += ["", f"## Menu (prices in {info['currency']})",
                   *[f"- {m['name']}, {m['price']}" + (f" - {m['description']}" if m.get("description") else "") for m in menu]]
     lines += ["", "## Knowledge base", *[f"Q: {f['q']}\nA: {f['a']}" for f in config["knowledge_base"]["faq"]]]
     return "\n".join(lines)
@@ -189,7 +147,7 @@ def build_assistant(config: dict, schedule: dict, env: dict[str, str], business:
     stt = config["speech_to_text"]
     greet = next(s["say"] for s in config["script"] if s["step"] == "greet")
     info = config.get("clinic") or config["business"]
-    prompt = build_prompt(config, schedule) if business == "dental" else business_prompt(config)
+    prompt = build_prompt(config, schedule)
     return {
         "name": f"{info['name']} demo",
         "firstMessage": greet,
