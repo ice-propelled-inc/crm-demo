@@ -103,7 +103,10 @@ Deno.serve(async (req) => {
         await markEnded(callId, "callback");
         return texml(`<Say voice="Polly.Joanna">${xmlEsc(config.handoff.admin_no_answer.say)}</Say><Hangup/>`);
       }
+      // vapi-webhook may have reported the transfer already ("forwarding" status).
+      const { data: now } = await db.from("calls").select("mode").eq("id", callId).single();
       await db.from("calls").update({ mode: "transferring" }).eq("id", callId);
+      if (now?.mode !== "transferring") await systemMessage(callId, "Transferring the call to the administrator");
       return texml(
         `<Dial timeout="20" answerOnBridge="true" record="record-from-answer-dual" ` +
         `recordingStatusCallback="${step("recording", callId)}" action="${step("transfer-result", callId)}">` +

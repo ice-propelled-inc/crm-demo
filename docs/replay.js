@@ -32,6 +32,18 @@ const Replay = {
     render();
   },
 
+  // Take over button in Replay: the scenario stops and the administrator leads the conversation.
+  takeover(callId) {
+    const call = App.calls.get(callId);
+    if (!call || call.status === 'ended') return;
+    this.run++;
+    App.incoming = null;
+    Store.upsertCall({ id: callId, status: 'active', mode: 'admin' });
+    Store.addMessage({ call_id: callId, speaker: 'system', text: call.channel === 'chat'
+      ? `${L('admin')} took over the chat. The AI assistant stopped replying; the scenario stops here.`
+      : `${L('admin')} took over the call. The AI assistant keeps intake and suggestions; the scenario stops here.` });
+  },
+
   scenarios: () => App.replay?.scenarios || DENTAL_SCENARIOS,
 
   setupBar() {
@@ -87,6 +99,11 @@ function makeCtx(run, channel = 'phone') {
   const c = {
     callId, apptId, wait, system, chat,
     mode(mode, extra = {}) { Store.upsertCall({ id: callId, status: 'active', mode, ...extra }); },
+    // The AI reports a handoff trigger (as update_call_state does in the backend): reason on the call and a message.
+    askHandoff(reason) {
+      Store.upsertCall({ id: callId, handoff_reason: reason });
+      system(`AI assistant asks for a handoff: ${reasonLabel(reason)}`);
+    },
 
     // A new call or chat: the operation mode decides who answers. adminAnswers: the administrator picks up.
     async open(callerPhone, adminAnswers = false) {
@@ -407,7 +424,7 @@ const SCENARIOS = {
     await c.say('ai', scriptSay('greet'));
     await c.say('caller', 'Hi, can I speak to someone at the front desk about my bill?');
     c.state('handoff', 'ask_intent', { complaint: 'Question about a bill' }, { handoff_reason: 'human_requested' });
-    Store.upsertCall({ id: c.callId, handoff_reason: 'human_requested' });
+    c.askHandoff('human_requested');
     await c.say('ai', 'Of course. May I have your name and the best number to call you back?');
     await c.say('caller', `Laura Chen, and ${phone} is fine.`);
     c.state('handoff', 'confirm_phone', { name: 'Laura Chen', phone });
@@ -487,7 +504,7 @@ async function urgentHandoff(c, adminAnswers) {
   await c.say('ai', scriptSay('greet'));
   await c.say('caller', 'Hi, I have a really bad toothache and my cheek is swelling up.');
   c.state('handoff', 'ask_name', { complaint: 'Severe toothache, swollen cheek', service: svc.id }, { handoff_reason: reason });
-  Store.upsertCall({ id: c.callId, handoff_reason: reason });
+  c.askHandoff(reason);
   await c.say('ai', "I'm sorry you're in pain. I'll connect you with our administrator right away. May I have your name first?");
   await c.say('caller', 'David Wilson.');
   c.state('handoff', 'confirm_phone', { name: 'David Wilson' });
@@ -590,7 +607,7 @@ async function runScripted(sc, c) {
       const [stage, step] = st.state.split('/');
       const extra = st.handoff_reason ? { handoff_reason: st.handoff_reason } : {};
       c.state(stage, step, fillObj(st.fields), extra);
-      if (st.handoff_reason) Store.upsertCall({ id: c.callId, handoff_reason: st.handoff_reason });
+      if (st.handoff_reason) c.askHandoff(st.handoff_reason);
     } else if (st.slot) {
       slots[st.slot.name] = findSlot(st.slot);
     } else if (st.book) {

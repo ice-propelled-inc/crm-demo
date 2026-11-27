@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 // Agent tools (agent-config.json "tools") and the call-state / appointment logic shared with the UC2 observer.
 // Every call belongs to a business set (calls.business); config, schedule and bookings are taken for that set.
-import { callBusiness, db, digits, loadConfig, loadSettings, resourceField } from "./common.ts";
+import { callBusiness, db, digits, loadConfig, loadSettings, resourceField, systemMessage } from "./common.ts";
 import { notificationEnabled, notify } from "./notify.ts";
 import {
   addDays, candidateDoctors, findService, findSlots, fmtMin, isFree, label, loadBookings, normStart, nowInTz, toMin,
@@ -67,7 +67,7 @@ async function syncDraft(callId: string, fields: Record<string, any>) {
 }
 
 export async function updateCallState(callId: string, args: any) {
-  const { data: prev } = await db.from("call_state").select("fields").eq("call_id", callId).maybeSingle();
+  const { data: prev } = await db.from("call_state").select("fields,handoff_reason").eq("call_id", callId).maybeSingle();
   const clean = Object.fromEntries(Object.entries(args.fields || {}).filter(([, v]) => v !== null && v !== undefined && v !== ""));
   const fields = { ...(prev?.fields || {}), ...clean };
   const row: Record<string, any> = { call_id: callId, fields, updated_at: new Date().toISOString() };
@@ -77,6 +77,12 @@ export async function updateCallState(callId: string, args: any) {
   const { error } = await db.from("call_state").upsert(row);
   if (error) throw new Error(error.message);
   if (args.handoff_reason) await db.from("calls").update({ handoff_reason: args.handoff_reason }).eq("id", callId);
+  // Tell the administrator on the page that the AI wants to hand the conversation over, and why.
+  if (args.handoff_reason && args.handoff_reason !== prev?.handoff_reason) {
+    const { config } = await loadConfig(await callBusiness(callId));
+    const trigger = config.handoff.triggers.find((t: any) => t.id === args.handoff_reason);
+    await systemMessage(callId, `AI assistant asks for a handoff: ${trigger?.description || args.handoff_reason}`);
+  }
   await syncDraft(callId, fields);
   return fields;
 }

@@ -221,6 +221,8 @@ table.edit input[type=text], table.edit input[type=number] { width: 100%; min-wi
 .sg { border: 1px solid var(--line-soft); border-radius: 9px; padding: .55rem .65rem; font-size: .87rem; }
 .sg .eyebrow { display: flex; align-items: center; gap: .35rem; margin-bottom: .15rem; color: var(--primary); }
 .sg.warn { background: var(--amber-bg); border-color: #f2d9a6; } .sg.warn .eyebrow { color: var(--amber); }
+.handoff-alert { display: flex; gap: .55rem; align-items: flex-start; margin-top: .7rem; padding: .6rem .75rem; border-radius: 9px; background: #fdecec; border: 1px solid #f3c4c4; color: #8f1d1d; font-size: .9rem; }
+.handoff-alert .i { flex: none; margin-top: .1rem; }
 .slots { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .2rem; }
 .slot { font-size: .78rem; border: 1px solid #cfe9dc; background: #f1faf5; color: var(--green); border-radius: 6px; padding: .15rem .45rem; }
 

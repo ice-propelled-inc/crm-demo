@@ -5,9 +5,10 @@
 //   reset-data  { business }                    back to the seed files published with the page
 //   task        { id, status }                  change a task status
 //   chat-join   { call_id }                     the administrator takes over a chat
+//   takeover    { call_id }                     the administrator takes a call or chat over from the AI
 //   chat-reply  { call_id, text }               the administrator writes in a chat; the observer updates the live page
 //   reminders   { business? }                   send due reminders (call it from pg_cron every 15 minutes)
-import { CORS, db, dropConfigCache, json, loadConfig, normBiz, pinError, seedConfig, systemMessage } from "../_shared/common.ts";
+import { CORS, db, dropConfigCache, env, json, loadConfig, normBiz, pinError, seedConfig, systemMessage } from "../_shared/common.ts";
 import { pushToVapi } from "../_shared/prompt.ts";
 import { observe } from "../_shared/observer.ts";
 import { sendDueReminders } from "../_shared/notify.ts";
@@ -32,6 +33,44 @@ async function joinChat(callId: string) {
   if (data?.channel !== "chat" || data.status === "ended" || data.mode === "admin") return;
   await db.from("calls").update({ status: "active", mode: "admin" }).eq("id", callId);
   await systemMessage(callId, data.mode === "transferring" ? "Administrator joined the chat." : "Administrator replied. The AI assistant shows intake and suggestions.");
+}
+
+// The administrator takes a conversation over from the AI assistant.
+//   chat              the AI stops replying, the administrator writes
+//   Twilio call       the live call is redirected to twilio-voice?step=takeover, which rings the admin softphone
+//   fake caller page  stage "handoff" in call_state makes the page stop Vapi and ring the administrator
+async function takeOver(callId: string): Promise<Record<string, unknown>> {
+  if (!callId) throw new Error("call_id is required");
+  const { data: call } = await db.from("calls").select("mode,status,channel,twilio_call_sid").eq("id", callId).single();
+  if (!call || call.status === "ended") throw new Error("The conversation has ended");
+  if (call.channel === "chat") {
+    await joinChat(callId);
+    return { ok: true, message: "You are in the chat. The AI assistant stopped replying." };
+  }
+  if (call.mode === "admin") return { ok: true, message: "You are already on the call" };
+  if (call.mode !== "ai") throw new Error("The AI assistant is not on the call");
+  const sid = call.twilio_call_sid || "";
+  if (/^CA[0-9a-f]{32}$/i.test(sid)) {
+    const account = env("TWILIO_ACCOUNT_SID");
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${account}/Calls/${sid}.json`, {
+      method: "POST",
+      headers: { Authorization: `Basic ${btoa(`${account}:${env("TWILIO_AUTH_TOKEN")}`)}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        Url: `${env("FUNCTIONS_PUBLIC_URL").replace(/\/$/, "")}/twilio-voice?step=takeover&call_id=${callId}`, Method: "POST",
+      }),
+    });
+    if (!r.ok) throw new Error(`Twilio: ${(await r.json().catch(() => ({}))).message || r.status}`);
+  } else if (sid) {
+    throw new Error("Take over works for Twilio calls and the fake caller. Telnyx calls are not supported yet.");
+  } else {
+    const { data: st } = await db.from("call_state").select("call_id").eq("call_id", callId).maybeSingle();
+    const { error } = st
+      ? await db.from("call_state").update({ stage: "handoff", updated_at: new Date().toISOString() }).eq("call_id", callId)
+      : await db.from("call_state").insert({ call_id: callId, fields: {}, stage: "handoff" });
+    if (error) throw new Error(error.message);
+  }
+  await systemMessage(callId, "Administrator is taking over the call");
+  return { ok: true, message: "Taking over: your softphone answers in a moment" };
 }
 
 Deno.serve(async (req) => {
@@ -91,6 +130,9 @@ Deno.serve(async (req) => {
       case "chat-join":
         await joinChat(body.call_id);
         return json({ ok: true });
+
+      case "takeover":
+        return json(await takeOver(body.call_id));
 
       case "chat-reply": {
         if (!body.call_id || !body.text) return json({ error: "call_id and text are required" }, 400);

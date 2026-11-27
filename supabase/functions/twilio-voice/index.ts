@@ -3,6 +3,7 @@
 //   incoming        ring the admin softphone for admin_ring_timeout_sec
 //   after-admin     no answer -> forward to the Vapi assistant over SIP
 //   refer           Vapi transferCall (SIP REFER) -> ring the admin softphone again
+//   takeover        the administrator pressed Take over on the page -> ring the admin softphone
 //   transfer-result admin did not pick up -> apologise, keep a Draft, end the call
 //   client-answered admin answered (status callback)
 //   vapi-done       the Vapi leg ended without a transfer
@@ -49,6 +50,12 @@ async function markEnded(callId: string, outcome?: string) {
 const toVapi = (callId: string) =>
   `<Dial answerOnBridge="true" action="${step("vapi-done", callId)}" referUrl="${step("refer", callId)}">` +
   `<Sip>${xmlEsc(env("VAPI_SIP_URI"))}</Sip></Dial>`;
+
+// Ring the admin softphone during a call (handoff or take over); no pickup -> transfer-result.
+const ringAdminAgain = (callId: string) =>
+  `<Dial timeout="20" answerOnBridge="true" record="record-from-answer-dual" ` +
+  `recordingStatusCallback="${step("recording", callId)}" action="${step("transfer-result", callId)}">` +
+  adminClient(callId, true) + `</Dial>`;
 
 const aiFirstText = (s: { operation_mode: string; admin_availability: string }) => s.operation_mode === "autonomous"
   ? "Autonomous mode: the AI assistant answered at once"
@@ -105,12 +112,17 @@ Deno.serve(async (req) => {
         await markEnded(callId, "callback");
         return twiml(`<Say voice="Polly.Joanna">${xmlEsc(config.handoff.admin_no_answer.say)}</Say><Hangup/>`);
       }
+      // vapi-webhook may have reported the transfer already ("forwarding" status).
+      const { data: now } = await db.from("calls").select("mode").eq("id", callId).single();
       await db.from("calls").update({ mode: "transferring" }).eq("id", callId);
-      return twiml(
-        `<Dial timeout="20" answerOnBridge="true" record="record-from-answer-dual" ` +
-        `recordingStatusCallback="${step("recording", callId)}" action="${step("transfer-result", callId)}">` +
-        adminClient(callId, true) + `</Dial>`,
-      );
+      if (now?.mode !== "transferring") await systemMessage(callId, "Transferring the call to the administrator");
+      return twiml(ringAdminAgain(callId));
+    }
+
+    case "takeover": {
+      // The administrator pressed Take over on the page (admin function redirected the live call here).
+      await db.from("calls").update({ mode: "transferring" }).eq("id", callId);
+      return twiml(ringAdminAgain(callId));
     }
 
     case "transfer-result": {

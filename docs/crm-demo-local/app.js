@@ -203,8 +203,12 @@ const Store = {
     render();
   },
   upsertCall(c) {
-    const next = { channel: 'phone', ...(App.calls.get(c.id) || {}), ...c };
+    const prev = App.calls.get(c.id);
+    const next = { channel: 'phone', ...(prev || {}), ...c };
     App.calls.set(c.id, next);
+    if (prev && next.handoff_reason && !prev.handoff_reason && next.status !== 'ended') {
+      toast(`AI assistant asks for a handoff: ${reasonLabel(next.handoff_reason)}`);
+    }
     const active = App.calls.get(App.activeCallId);
     if (next.status !== 'ended' && (!active || active.status === 'ended')) App.activeCallId = next.id;
     render();
@@ -426,8 +430,20 @@ function viewLive() {
   if (isChat(call) && call.status !== 'ended') {
     if (App.mode !== 'live') chatBox = '<div class="muted small" style="margin-top:.6rem">Replies from this page work in Live mode.</div>';
     else if (call.mode === 'admin') chatBox = `<form class="composer" data-form="chat"><input id="composer" placeholder="Write to the visitor…" autocomplete="off"><button class="btn primary" aria-label="Send">${icon('send')}</button></form>`;
-    else chatBox = `<div class="toolbar" style="margin-top:.6rem"><button class="btn primary" data-act="joinChat">${icon('chat')}Take over the chat</button><span class="muted small">The AI stops replying; it keeps intake and suggestions.</span></div>`;
+    else chatBox = '<div class="muted small" style="margin-top:.6rem">Press Take over to reply. The AI stops replying; it keeps intake and suggestions.</div>';
   }
+
+  // Handoff: the AI asked for it (trigger), or is ringing the administrator now.
+  const reason = call.handoff_reason || st.handoff_reason;
+  const handingOff = call.status !== 'ended' && call.mode !== 'admin' && (reason || call.mode === 'transferring');
+  const handoffBanner = handingOff ? `<div class="handoff-alert">${icon('alert')}<div>
+      <b>${call.mode === 'transferring'
+        ? (isChat(call) ? 'The AI assistant is inviting you to the chat' : `The AI assistant is transferring the call to you`)
+        : 'The AI assistant asks for a handoff'}</b>
+      ${reason ? `<div>${esc(reasonLabel(reason))}</div>` : ''}</div></div>` : '';
+  // Take over: while the AI leads (and, for a chat, while it waits for the administrator).
+  const canTake = call.status !== 'ended' && (call.mode === 'ai' || (isChat(call) && (call.mode === 'ringing' || call.mode === 'transferring')));
+  const takeBtn = canTake ? `<button class="btn primary sm" data-act="takeover">${icon(isChat(call) ? 'chat' : 'phone')}Take over</button>` : '';
 
   const others = [...App.calls.values()].filter(c => c.status !== 'ended' && c.id !== call.id);
   return pageHead('Live conversation', sub, others.length ? `<label class="compact-label">Switch
@@ -444,7 +460,9 @@ function viewLive() {
           ${appt ? `<span class="badge ${STATUS_CLASS[appt.status] || ''}">${esc(L('booking'))}: ${esc(statusLabel(appt.status))}</span>` : ''}
           <span class="grow" style="flex:1"></span>
           <span class="badge violet">${esc(MODE_NAMES[App.settings.operation_mode])} · ${esc(AVAIL_NAMES[App.settings.admin_availability])}</span>
+          ${takeBtn}
         </div>
+        ${handoffBanner}
       </div>
       <div class="live-grid">
         <div class="stack">
@@ -708,7 +726,7 @@ const Softphones = {
 };
 
 const Live = {
-  sb: null, channel: null, device: null, stt: null, fake: null, fakeRing: null, fakeCall: null,
+  sb: null, channel: null, device: null, stt: null, fake: null, fakeRing: null, fakeCall: null, takeover: null,
 
   async start() {
     if (!isLiveConfigured()) { setLiveStatus('Not configured', 'amber'); return; }
@@ -844,6 +862,12 @@ const Live = {
       },
       onDecline: () => { decline(); App.incoming = null; render(); },
     };
+    // The administrator pressed Take over: answer the ring at once.
+    if (transfer && callId && callId === this.takeover) {
+      this.takeover = null;
+      App.incoming.onAnswer();
+      return;
+    }
     render();
   },
 
@@ -892,7 +916,8 @@ const Live = {
   async onFake(ev, p) {
     const fake = (event, payload = {}) => FakeCall.send(this.fake, event, { call_id: p.call_id, ...payload });
     if (ev === 'ring' && !this.fakeCall && (p.business || 'dental') === this.biz()) {
-      if (p.transfer ? !canHandOff() : firstResponder() === 'ai') {
+      const takingOver = p.transfer && p.call_id === this.takeover;
+      if (!takingOver && (p.transfer ? !canHandOff() : firstResponder() === 'ai')) {
         fake('decline');
         toast(p.transfer ? `Administrator is ${AVAIL_NAMES[App.settings.admin_availability]}: handoff becomes a callback task`
           : `${MODE_NAMES[App.settings.operation_mode]} · ${AVAIL_NAMES[App.settings.admin_availability]}: the AI assistant answers`);
@@ -977,6 +1002,20 @@ async function switchMode(mode) {
   render();
 }
 
+// Take over button. Live: the admin function moves the call to the softphone (answered automatically) or joins
+// the chat. Replay: the scenario stops and the administrator leads the conversation.
+async function takeOver(callId) {
+  if (!App.calls.get(callId)) return;
+  if (App.mode !== 'live') { Replay.takeover(callId); return; }
+  Live.takeover = callId;
+  try {
+    toast((await Live.fn('admin', { action: 'takeover', call_id: callId })).message || 'Taking over');
+  } catch (e) {
+    Live.takeover = null;
+    toast(e.message);
+  }
+}
+
 function bindEvents() {
   window.addEventListener('hashchange', () => {
     App.view = location.hash.replace(/^#\/?/, '') || 'live';
@@ -1001,7 +1040,7 @@ function bindEvents() {
     if (act === 'open') { App.activeCallId = b.dataset.id; go('live'); }
     if (act === 'toggleConv') { App.openConv = App.openConv === b.dataset.id ? null : b.dataset.id; render(); }
     if (act === 'openConv') { App.openConv = b.dataset.id; go('conversations'); }
-    if (act === 'joinChat') Live.fn('admin', { action: 'chat-join', call_id: App.activeCallId }).catch(err => toast(err.message));
+    if (act === 'takeover') takeOver(App.activeCallId);
     if (typeof DataEditor !== 'undefined') DataEditor.onClick(b, e);
   });
   view.addEventListener('change', e => {
